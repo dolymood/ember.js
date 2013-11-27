@@ -26,7 +26,7 @@ var TestEnumerable = Ember.Object.extend(Ember.Enumerable, {
 
   length: Ember.computed(function() {
     return this._content.length;
-  }).property(),
+  }),
 
   slice: function() {
     return this._content.slice();
@@ -55,6 +55,102 @@ Ember.EnumerableTests.extend({
 
 }).run();
 
+module('Ember.Enumerable');
+
+test("should apply Ember.Array to return value of map", function() {
+  var x = Ember.Object.createWithMixins(Ember.Enumerable);
+  var y = x.map(Ember.K);
+  equal(Ember.Array.detect(y), true, "should have mixin applied");
+});
+
+test("should apply Ember.Array to return value of filter", function() {
+  var x = Ember.Object.createWithMixins(Ember.Enumerable);
+  var y = x.filter(Ember.K);
+  equal(Ember.Array.detect(y), true, "should have mixin applied");
+});
+
+test("should apply Ember.Array to return value of invoke", function() {
+  var x = Ember.Object.createWithMixins(Ember.Enumerable);
+  var y = x.invoke(Ember.K);
+  equal(Ember.Array.detect(y), true, "should have mixin applied");
+});
+
+test("should apply Ember.Array to return value of toArray", function() {
+  var x = Ember.Object.createWithMixins(Ember.Enumerable);
+  var y = x.toArray(Ember.K);
+  equal(Ember.Array.detect(y), true, "should have mixin applied");
+});
+
+test("should apply Ember.Array to return value of without", function() {
+  var x = Ember.Object.createWithMixins(Ember.Enumerable, {
+    contains: function() {
+      return true;
+    }
+  });
+  var y = x.without(Ember.K);
+  equal(Ember.Array.detect(y), true, "should have mixin applied");
+});
+
+test("should apply Ember.Array to return value of uniq", function() {
+  var x = Ember.Object.createWithMixins(Ember.Enumerable);
+  var y = x.uniq(Ember.K);
+  equal(Ember.Array.detect(y), true, "should have mixin applied");
+});
+
+test('any', function() {
+  var kittens = Ember.A([{
+    color: 'white'
+  }, {
+    color: 'black'
+  }, {
+    color: 'white'
+  }]),
+  foundWhite = kittens.any(function(kitten) { return kitten.color === 'white'; }),
+  foundWhite2 = kittens.isAny('color', 'white');
+
+  equal(foundWhite, true);
+  equal(foundWhite2, true);
+});
+
+test('any with NaN', function() {
+  var numbers = Ember.A([1,2,NaN,4]);
+
+  var hasNaN = numbers.any(function(n){ return isNaN(n); });
+
+  equal(hasNaN, true, "works when matching NaN");
+});
+
+test('every', function() {
+  var allColorsKittens = Ember.A([{
+    color: 'white'
+  }, {
+    color: 'black'
+  }, {
+    color: 'white'
+  }]),
+  allWhiteKittens = Ember.A([{
+    color: 'white'
+  }, {
+    color: 'white'
+  }, {
+    color: 'white'
+  }]),
+  allWhite = false,
+  whiteKittenPredicate = function(kitten) { return kitten.color === 'white'; };
+
+  allWhite = allColorsKittens.every(whiteKittenPredicate);
+  equal(allWhite, false);
+
+  allWhite = allWhiteKittens.every(whiteKittenPredicate);
+  equal(allWhite, true);
+
+  allWhite = allColorsKittens.isEvery('color', 'white');
+  equal(allWhite, false);
+
+  allWhite = allWhiteKittens.isEvery('color', 'white');
+  equal(allWhite, true);
+});
+
 // ..........................................................
 // CONTENT DID CHANGE
 //
@@ -74,13 +170,13 @@ module('mixins/enumerable/enumerableContentDidChange');
 
 test('should notify observers of []', function() {
 
-  var obj = Ember.Object.create(Ember.Enumerable, {
+  var obj = Ember.Object.createWithMixins(Ember.Enumerable, {
     nextObject: function() {}, // avoid exceptions
 
     _count: 0,
-    enumerablePropertyDidChange: Ember.observer(function() {
+    enumerablePropertyDidChange: Ember.observer('[]', function() {
       this._count++;
-    }, '[]')
+    })
   });
 
   equal(obj._count, 0, 'should not have invoked yet');
@@ -96,11 +192,11 @@ test('should notify observers of []', function() {
 
 module('notify observers of length', {
   setup: function() {
-    obj = DummyEnum.create({
+    obj = DummyEnum.createWithMixins({
       _after: 0,
-      lengthDidChange: Ember.observer(function() {
+      lengthDidChange: Ember.observer('length', function() {
         this._after++;
-      }, 'length')
+      })
 
     });
 
@@ -165,7 +261,7 @@ module('notify enumerable observers', {
   setup: function() {
     obj = DummyEnum.create();
 
-    observer = Ember.Object.create({
+    observer = Ember.Object.createWithMixins({
       _before: null,
       _after: null,
 
@@ -231,7 +327,4 @@ test('removing enumerable observer should disable', function() {
   obj.enumerableContentDidChange();
   deepEqual(observer._after, null);
 });
-
-
-
 

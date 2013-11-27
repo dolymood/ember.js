@@ -1,6 +1,7 @@
 /*globals Handlebars */
 
 require("ember-handlebars/ext");
+require("ember-handlebars/component_lookup");
 
 /**
 @module ember
@@ -11,12 +12,12 @@ require("ember-handlebars/ext");
   @private
 
   Find templates stored in the head tag as script tags and make them available
-  to Ember.CoreView in the global Ember.TEMPLATES object. This will be run as as
-  jQuery DOM-ready callback.
+  to `Ember.CoreView` in the global `Ember.TEMPLATES` object. This will be run
+  as as jQuery DOM-ready callback.
 
-  Script tags with "text/x-handlebars" will be compiled
+  Script tags with `text/x-handlebars` will be compiled
   with Ember's Handlebars and are suitable for use as a view's template.
-  Those with type="text/x-raw-handlebars" will be compiled with regular
+  Those with type `text/x-raw-handlebars` will be compiled with regular
   Handlebars and are suitable for use in views' computed properties.
 
   @method bootstrap
@@ -30,8 +31,7 @@ Ember.Handlebars.bootstrap = function(ctx) {
   Ember.$(selectors, ctx)
     .each(function() {
     // Get a reference to the script tag
-    var script = Ember.$(this),
-        type   = script.attr('type');
+    var script = Ember.$(this);
 
     var compile = (script.attr('type') === 'text/x-raw-handlebars') ?
                   Ember.$.proxy(Handlebars.compile, Handlebars) :
@@ -41,6 +41,11 @@ Ember.Handlebars.bootstrap = function(ctx) {
       // id if no name is found.
       templateName = script.attr('data-template-name') || script.attr('id') || 'application',
       template = compile(script.html());
+
+    // Check if template of same name already exists
+    if (Ember.TEMPLATES[templateName] !== undefined) {
+      throw new Ember.Error('Template named "' + templateName  + '" already exists.');
+    }
 
     // For templates which have a name, we save them and then remove them from the DOM
     Ember.TEMPLATES[templateName] = template;
@@ -54,6 +59,10 @@ function bootstrap() {
   Ember.Handlebars.bootstrap( Ember.$(document) );
 }
 
+function registerComponentLookup(container) {
+  container.register('component-lookup:main', Ember.ComponentLookup);
+}
+
 /*
   We tie this to application.load to ensure that we've at least
   attempted to bootstrap at the point that the application is loaded.
@@ -65,4 +74,15 @@ function bootstrap() {
   from the DOM after processing.
 */
 
-Ember.onLoad('application', bootstrap);
+Ember.onLoad('Ember.Application', function(Application) {
+  Application.initializer({
+    name: 'domTemplates',
+    initialize: bootstrap
+  });
+
+  Application.initializer({
+    name: 'registerComponentLookup',
+    after: 'domTemplates',
+    initialize: registerComponentLookup
+  });
+});

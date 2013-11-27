@@ -10,51 +10,32 @@ require("ember-handlebars/controls/text_support");
 var get = Ember.get, set = Ember.set;
 
 /**
-  The `Ember.TextField` view class renders a text
-  [input](https://developer.mozilla.org/en/HTML/Element/Input) element. It
-  allows for binding Ember properties to the text field contents (`value`),
-  live-updating as the user inputs text.
 
-  Example:
+  The internal class used to create text inputs when the `{{input}}`
+  helper is used with `type` of `text`.
 
-  ``` handlebars
-  {{view Ember.TextField valueBinding="firstName"}}
-  ```
+  See [handlebars.helpers.input](/api/classes/Ember.Handlebars.helpers.html#method_input)  for usage details.
 
   ## Layout and LayoutName properties
-  Because HTML `input` elements are self closing `layout` and `layoutName` properties will
-  not be applied. See `Ember.View`'s layout section for more information.
 
-  ## HTML Attributes
-
-  By default `Ember.TextField` provides support for `type`, `value`, `size`, `placeholder`,
-  `disabled`, `maxlength` and `tabindex` attributes on a textarea. If you need to support
-  more attributes have a look at the `attributeBindings` property in `Ember.View`'s
-  HTML Attributes section.
-
-  To globally add support for additional attributes you can reopen `Ember.TextField` or
-  `Ember.TextSupport`.
-
-  ``` javascript
-  Ember.TextSupport.reopen({
-    attributeBindings: ["required"]
-  })
-  ```
+  Because HTML `input` elements are self closing `layout` and `layoutName`
+  properties will not be applied. See [Ember.View](/api/classes/Ember.View.html)'s
+  layout section for more information.
 
   @class TextField
   @namespace Ember
-  @extends Ember.View
+  @extends Ember.Component
   @uses Ember.TextSupport
 */
-Ember.TextField = Ember.View.extend(Ember.TextSupport,
+Ember.TextField = Ember.Component.extend(Ember.TextSupport,
   /** @scope Ember.TextField.prototype */ {
 
   classNames: ['ember-text-field'],
   tagName: "input",
-  attributeBindings: ['type', 'value', 'size'],
+  attributeBindings: ['type', 'value', 'size', 'pattern', 'name'],
 
   /**
-    The value attribute of the input element. As the user inputs text, this
+    The `value` attribute of the input element. As the user inputs text, this
     property is updated live.
 
     @property value
@@ -64,7 +45,7 @@ Ember.TextField = Ember.View.extend(Ember.TextSupport,
   value: "",
 
   /**
-    The type attribute of the input element.
+    The `type` attribute of the input element.
 
     @property type
     @type String
@@ -73,11 +54,20 @@ Ember.TextField = Ember.View.extend(Ember.TextSupport,
   type: "text",
 
   /**
-    The size of the text field in characters.
+    The `size` of the text field in characters.
 
     @property size
     @type String
     @default null
   */
-  size: null
+  size: null,
+
+  /**
+    The `pattern` the pattern attribute of input element.
+
+    @property pattern
+    @type String
+    @default null
+  */
+  pattern: null
 });

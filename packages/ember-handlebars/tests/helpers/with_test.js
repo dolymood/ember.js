@@ -23,7 +23,7 @@ module("Handlebars {{#with}} helper", {
   },
 
   teardown: function() {
-    Ember.run(function(){
+    Ember.run(function() {
       view.destroy();
     });
     Ember.lookup = originalLookup;
@@ -60,6 +60,57 @@ test("updating a property on the view should update the HTML", function() {
   equal(view.$().text(), "Señorette Engineer: Tom Dale", "should be properly scoped after updating");
 });
 
+module("Multiple Handlebars {{with}} helpers with 'as'", {
+  setup: function() {
+    Ember.lookup = lookup = { Ember: Ember };
+
+    view = Ember.View.create({
+      template: Ember.Handlebars.compile("Admin: {{#with admin as person}}{{person.name}}{{/with}} User: {{#with user as person}}{{person.name}}{{/with}}"),
+      context: {
+        admin: { name: "Tom Dale" },
+        user: { name: "Yehuda Katz"}
+      }
+    });
+
+    appendView(view);
+  },
+
+  teardown: function() {
+    Ember.run(function() {
+      view.destroy();
+    });
+    Ember.lookup = originalLookup;
+  }
+});
+
+test("re-using the same variable with different #with blocks does not override each other", function(){
+  equal(view.$().text(), "Admin: Tom Dale User: Yehuda Katz", "should be properly scoped");
+});
+
+test("the scoped variable is not available outside the {{with}} block.", function(){
+  Ember.run(function() {
+    view.set('template', Ember.Handlebars.compile("{{name}}-{{#with other as name}}{{name}}{{/with}}-{{name}}"));
+    view.set('context', {
+      name: 'Stef',
+      other: 'Yehuda'
+    });
+  });
+
+  equal(view.$().text(), "Stef-Yehuda-Stef", "should be properly scoped after updating");
+});
+
+test("nested {{with}} blocks shadow the outer scoped variable properly.", function(){
+  Ember.run(function() {
+    view.set('template', Ember.Handlebars.compile("{{#with first as ring}}{{ring}}-{{#with fifth as ring}}{{ring}}-{{#with ninth as ring}}{{ring}}-{{/with}}{{ring}}-{{/with}}{{ring}}{{/with}}"));
+    view.set('context', {
+      first: 'Limbo',
+      fifth: 'Wrath',
+      ninth: 'Treachery'
+    });
+  });
+
+  equal(view.$().text(), "Limbo-Wrath-Treachery-Wrath-Limbo", "should be properly scoped after updating");
+});
 module("Handlebars {{#with}} globals helper", {
   setup: function() {
     Ember.lookup = lookup = { Ember: Ember };
@@ -73,7 +124,7 @@ module("Handlebars {{#with}} globals helper", {
   },
 
   teardown: function() {
-    Ember.run(function(){
+    Ember.run(function() {
       view.destroy();
     });
     Ember.lookup = originalLookup;
@@ -106,6 +157,10 @@ test("it should support #with view as foo", function() {
   });
 
   equal(view.$().text(), "Thunder", "should update");
+
+  Ember.run(function() {
+    view.destroy();
+  });
 });
 
 test("it should support #with name as food, then #with foo as bar", function() {
@@ -122,6 +177,10 @@ test("it should support #with name as food, then #with foo as bar", function() {
   });
 
   equal(view.$().text(), "butterfly", "should update");
+
+  Ember.run(function() {
+    view.destroy();
+  });
 });
 
 module("Handlebars {{#with this as foo}}");
@@ -140,4 +199,37 @@ test("it should support #with this as qux", function() {
   });
 
   equal(view.$().text(), "l'Pivots", "should update");
+
+  Ember.run(function() {
+    view.destroy();
+  });
+});
+
+module("Handlebars {{#with foo}} insideGroup");
+
+test("it should render without fail", function() {
+  var View = Ember.View.extend({
+    template: Ember.Handlebars.compile("{{#view view.childView}}{{#with person}}{{name}}{{/with}}{{/view}}"),
+    controller: Ember.Object.create({ person: { name: "Ivan IV Vasilyevich" } }),
+    childView: Ember.View.extend({
+      render: function(){
+        this.set('templateData.insideGroup', true);
+        return this._super.apply(this, arguments);
+      }
+    })
+  });
+
+  var view = View.create();
+  appendView(view);
+  equal(view.$().text(), "Ivan IV Vasilyevich", "should be properly scoped");
+
+  Ember.run(function() {
+    Ember.set(view, 'controller.person.name', "Ivan the Terrible");
+  });
+
+  equal(view.$().text(), "Ivan the Terrible", "should update");
+
+  Ember.run(function() {
+    view.destroy();
+  });
 });

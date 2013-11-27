@@ -12,10 +12,11 @@ var get = Ember.get, set = Ember.set;
 
   getURL: returns the current URL
   setURL(path): sets the current URL
+  replaceURL(path): replace the current URL (optional)
   onUpdateURL(callback): triggers the callback when the URL changes
   formatURL(url): formats `url` to be placed into `href` attribute
 
-  Calling setURL will not trigger onUpdateURL callbacks.
+  Calling setURL or replaceURL will not trigger onUpdateURL callbacks.
 
   TODO: This should perhaps be moved so that it's visible in the doc output.
 */
@@ -32,6 +33,22 @@ var get = Ember.get, set = Ember.set;
   @static
 */
 Ember.Location = {
+  /**
+   Create an instance of a an implementation of the `location` API. Requires
+   an options object with an `implementation` property.
+
+   Example
+
+   ```javascript
+   var hashLocation = Ember.Location.create({implementation: 'hash'});
+   var historyLocation = Ember.Location.create({implementation: 'history'});
+   var noneLocation = Ember.Location.create({implementation: 'none'});
+   ```
+
+    @method create
+    @param {Object} options
+    @return {Object} an instance of an implementation of the `location` API
+  */
   create: function(options) {
     var implementation = options && options.implementation;
     Ember.assert("Ember.Location.create: you must specify a 'implementation' option", !!implementation);
@@ -42,7 +59,28 @@ Ember.Location = {
     return implementationClass.create.apply(implementationClass, arguments);
   },
 
+  /**
+   Registers a class that implements the `location` API with an implementation
+   name. This implementation name can then be specified by the location property on
+   the application's router class.
+
+   Example
+
+   ```javascript
+   Ember.Location.registerImplementation('history', Ember.HistoryLocation);
+
+   App.Router.reopen({
+     location: 'history'
+   });
+   ```
+
+    @method registerImplementation
+    @param {String} name
+    @param {Object} implementation of the `location` API
+  */
   registerImplementation: function(name, implementation) {
+    Ember.deprecate('Using the Ember.Location.registerImplementation is no longer supported. Register your custom location implementation with the container instead.', false);
+
     this.implementations[name] = implementation;
   },
 

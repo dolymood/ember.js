@@ -10,6 +10,50 @@ require("ember-handlebars/views/metamorph_view");
 var get = Ember.get, set = Ember.set;
 
 Ember.Handlebars.EachView = Ember.CollectionView.extend(Ember._Metamorph, {
+  init: function() {
+    var itemController = get(this, 'itemController');
+    var binding;
+
+    if (itemController) {
+      var controller = get(this, 'controller.container').lookupFactory('controller:array').create({
+        parentController: get(this, 'controller'),
+        itemController: itemController,
+        target: get(this, 'controller'),
+        _eachView: this
+      });
+
+      this.disableContentObservers(function() {
+        set(this, 'content', controller);
+        binding = new Ember.Binding('content', '_eachView.dataSource').oneWay();
+        binding.connect(controller);
+      });
+
+      set(this, '_arrayController', controller);
+    } else {
+      this.disableContentObservers(function() {
+        binding = new Ember.Binding('content', 'dataSource').oneWay();
+        binding.connect(this);
+      });
+    }
+
+    return this._super();
+  },
+
+  _assertArrayLike: function(content) {
+    Ember.assert("The value that #each loops over must be an Array. You passed " + content.constructor + ", but it should have been an ArrayController", !Ember.ControllerMixin.detect(content) || (content && content.isGenerated) || content instanceof Ember.ArrayController);
+    Ember.assert("The value that #each loops over must be an Array. You passed " + ((Ember.ControllerMixin.detect(content) && content.get('model') !== undefined) ? ("" + content.get('model') + " (wrapped in " + content + ")") : ("" + content)), Ember.Array.detect(content));
+  },
+
+  disableContentObservers: function(callback) {
+    Ember.removeBeforeObserver(this, 'content', null, '_contentWillChange');
+    Ember.removeObserver(this, 'content', null, '_contentDidChange');
+
+    callback.call(this);
+
+    Ember.addBeforeObserver(this, 'content', null, '_contentWillChange');
+    Ember.addObserver(this, 'content', null, '_contentDidChange');
+  },
+
   itemViewClass: Ember._MetamorphView,
   emptyViewClass: Ember._MetamorphView,
 
@@ -20,6 +64,7 @@ Ember.Handlebars.EachView = Ember.CollectionView.extend(Ember._Metamorph, {
     // to insert keywords, it is responsible for cloning
     // the keywords hash. This will be fixed momentarily.
     var keyword = get(this, 'keyword');
+    var content = get(view, 'content');
 
     if (keyword) {
       var data = get(view, 'templateData');
@@ -28,14 +73,30 @@ Ember.Handlebars.EachView = Ember.CollectionView.extend(Ember._Metamorph, {
       data.keywords = view.cloneKeywords();
       set(view, 'templateData', data);
 
-      var content = get(view, 'content');
-
       // In this case, we do not bind, because the `content` of
       // a #each item cannot change.
       data.keywords[keyword] = content;
     }
 
+    // If {{#each}} is looping over an array of controllers,
+    // point each child view at their respective controller.
+    if (content && get(content, 'isController')) {
+      set(view, 'controller', content);
+    }
+
     return view;
+  },
+
+  destroy: function() {
+    if (!this._super()) { return; }
+
+    var arrayController = get(this, '_arrayController');
+
+    if (arrayController) {
+      arrayController.destroy();
+    }
+
+    return this;
   }
 });
 
@@ -82,6 +143,8 @@ GroupedEach.prototype = {
   },
 
   addArrayObservers: function() {
+    if (!this.content) { return; }
+
     this.content.addArrayObserver(this, {
       willChange: 'contentArrayWillChange',
       didChange: 'contentArrayDidChange'
@@ -89,6 +152,8 @@ GroupedEach.prototype = {
   },
 
   removeArrayObservers: function() {
+    if (!this.content) { return; }
+
     this.content.removeArrayObserver(this, {
       willChange: 'contentArrayWillChange',
       didChange: 'contentArrayDidChange'
@@ -106,6 +171,8 @@ GroupedEach.prototype = {
   },
 
   render: function() {
+    if (!this.content) { return; }
+
     var content = this.content,
         contentLength = get(content, 'length'),
         data = this.options.data,
@@ -118,23 +185,34 @@ GroupedEach.prototype = {
   },
 
   rerenderContainingView: function() {
-    Ember.run.scheduleOnce('render', this.containingView, 'rerender');
+    var self = this;
+    Ember.run.scheduleOnce('render', this, function() {
+      // It's possible it's been destroyed after we enqueued a re-render call.
+      if (!self.destroyed) {
+        self.containingView.rerender();
+      }
+    });
   },
 
   destroy: function() {
     this.removeContentObservers();
-    this.removeArrayObservers();
+    if (this.content) {
+      this.removeArrayObservers();
+    }
+    this.destroyed = true;
   }
 };
 
 /**
-  The `{{#each}}` helper loops over elements in a collection, rendering its block once for each item:
+  The `{{#each}}` helper loops over elements in a collection, rendering its
+  block once for each item. It is an extension of the base Handlebars `{{#each}}`
+  helper:
 
-  ``` javascript
+  ```javascript
   Developers = [{name: 'Yehuda'},{name: 'Tom'}, {name: 'Paul'}];
   ```
 
-  ``` handlebars
+  ```handlebars
   {{#each Developers}}
     {{name}}
   {{/each}}
@@ -142,42 +220,50 @@ GroupedEach.prototype = {
 
   `{{each}}` supports an alternative syntax with element naming:
 
-  ``` handlebars
+  ```handlebars
   {{#each person in Developers}}
     {{person.name}}
   {{/each}}
   ```
 
-  When looping over objects that do not have properties, `{{this}}` can be used to render the object:
+  When looping over objects that do not have properties, `{{this}}` can be used
+  to render the object:
 
-  ``` javascript
+  ```javascript
   DeveloperNames = ['Yehuda', 'Tom', 'Paul']
   ```
 
-  ``` handlebars
+  ```handlebars
   {{#each DeveloperNames}}
     {{this}}
   {{/each}}
   ```
+  ### {{else}} condition
+  `{{#each}}` can have a matching `{{else}}`. The contents of this block will render
+  if the collection is empty.
 
-  ### Blockless Use
-
-  If you provide an `itemViewClass` option that has its own `template` you can omit
-  the block in a similar way to how it can be done with the collection helper.
+  ```
+  {{#each person in Developers}}
+    {{person.name}}
+  {{else}}
+    <p>Sorry, nobody is available for this task.</p>
+  {{/each}}
+  ```
+  ### Specifying a View class for items
+  If you provide an `itemViewClass` option that references a view class
+  with its own `template` you can omit the block.
 
   The following template:
 
-  ``` handlebars
-  <script type="text/x-handlebars">
-    {{#view App.MyView }}
-      {{each view.items itemViewClass="App.AnItemView"}}
-    {{/view}}
-  </script>
+  ```handlebars
+  {{#view App.MyView }}
+    {{each view.items itemViewClass="App.AnItemView"}}
+  {{/view}}
   ```
 
   And application code
 
-  ``` javascript
+  ```javascript
   App = Ember.Application.create({
     MyView: Ember.View.extend({
       items: [
@@ -191,13 +277,11 @@ GroupedEach.prototype = {
   App.AnItemView = Ember.View.extend({
     template: Ember.Handlebars.compile("Greetings {{name}}")
   });
-
-  App.initialize();
   ```
 
   Will result in the HTML structure below
 
-  ``` html
+  ```html
   <div class="ember-view">
     <div class="ember-view">Greetings Dave</div>
     <div class="ember-view">Greetings Mary</div>
@@ -205,11 +289,91 @@ GroupedEach.prototype = {
   </div>
   ```
 
+  If an `itemViewClass` is defined on the helper, and therefore the helper is not
+  being used as a block, an `emptyViewClass` can also be provided optionally.
+  The `emptyViewClass` will match the behavior of the `{{else}}` condition
+  described above. That is, the `emptyViewClass` will render if the collection
+  is empty.
+
+  ### Representing each item with a Controller.
+  By default the controller lookup within an `{{#each}}` block will be
+  the controller of the template where the `{{#each}}` was used. If each
+  item needs to be presented by a custom controller you can provide a
+  `itemController` option which references a controller by lookup name.
+  Each item in the loop will be wrapped in an instance of this controller
+  and the item itself will be set to the `content` property of that controller.
+
+  This is useful in cases where properties of model objects need transformation
+  or synthesis for display:
+
+  ```javascript
+  App.DeveloperController = Ember.ObjectController.extend({
+    isAvailableForHire: function() {
+      return !this.get('content.isEmployed') && this.get('content.isSeekingWork');
+    }.property('isEmployed', 'isSeekingWork')
+  })
+  ```
+
+  ```handlebars
+  {{#each person in developers itemController="developer"}}
+    {{person.name}} {{#if person.isAvailableForHire}}Hire me!{{/if}}
+  {{/each}}
+  ```
+
+  Each itemController will receive a reference to the current controller as
+  a `parentController` property.
+
+  ### (Experimental) Grouped Each
+
+  When used in conjunction with the experimental [group helper](https://github.com/emberjs/group-helper),
+  you can inform Handlebars to re-render an entire group of items instead of
+  re-rendering them one at a time (in the event that they are changed en masse
+  or an item is added/removed).
+
+  ```handlebars
+  {{#group}}
+    {{#each people}}
+      {{firstName}} {{lastName}}
+    {{/each}}
+  {{/group}}
+  ```
+
+  This can be faster than the normal way that Handlebars re-renders items
+  in some cases.
+
+  If for some reason you have a group with more than one `#each`, you can make
+  one of the collections be updated in normal (non-grouped) fashion by setting
+  the option `groupedRows=true` (counter-intuitive, I know).
+
+  For example,
+
+  ```handlebars
+  {{dealershipName}}
+
+  {{#group}}
+    {{#each dealers}}
+      {{firstName}} {{lastName}}
+    {{/each}}
+
+    {{#each car in cars groupedRows=true}}
+      {{car.make}} {{car.model}} {{car.color}}
+    {{/each}}
+  {{/group}}
+  ```
+  Any change to `dealershipName` or the `dealers` collection will cause the
+  entire group to be re-rendered. However, changes to the `cars` collection
+  will be re-rendered individually (as normal).
+
+  Note that `group` behavior is also disabled by specifying an `itemViewClass`.
 
   @method each
   @for Ember.Handlebars.helpers
   @param [name] {String} name for item (used with `in`)
-  @param path {String} path
+  @param [path] {String} path
+  @param [options] {Object} Handlebars key/value pairs of options
+  @param [options.itemViewClass] {String} a path to a view class used for each item
+  @param [options.itemController] {String} name of a controller to be created for each item
+  @param [options.groupedRows] {boolean} enable normal item-by-item rendering when inside a `#group` helper
 */
 Ember.Handlebars.registerHelper('each', function(path, options) {
   if (arguments.length === 4) {
@@ -222,11 +386,14 @@ Ember.Handlebars.registerHelper('each', function(path, options) {
     if (path === '') { path = "this"; }
 
     options.hash.keyword = keywordName;
-  } else {
-    options.hash.eachHelper = 'each';
   }
 
-  options.hash.contentBinding = path;
+  if (arguments.length === 1) {
+    options = path;
+    path = 'this';
+  }
+
+  options.hash.dataSourceBinding = path;
   // Set up emptyView as a metamorph with no tag
   //options.hash.emptyViewClass = Ember._MetamorphView;
 

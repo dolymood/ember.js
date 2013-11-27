@@ -41,7 +41,7 @@ test("new Ember.Set([1,2,3]) should create set with three items in them", functi
 });
 
 test("new Ember.Set() should accept anything that implements Ember.Array", function() {
-  var arrayLikeObject = Ember.Object.create(Ember.Array, {
+  var arrayLikeObject = Ember.Object.createWithMixins(Ember.Array, {
     _content: [a,b,c],
     length: 3,
     objectAt: function(idx) { return this._content[idx]; }
@@ -234,7 +234,7 @@ test("should remove a bools and reduce length", function() {
   equal(set.length, oldLength-2, "should be 2 shorter") ;
 });
 
-test("should remove 0 and reduce length", function(){
+test("should remove 0 and reduce length", function() {
   var oldLength = set.length;
   set.remove(0) ;
   equal(set.contains(0), false, "should be removed") ;
@@ -290,11 +290,11 @@ module("Ember.Set.pop + Ember.Set.copy", {
 test("the pop() should remove an arbitrary object from the set", function() {
   var oldLength = set.length ;
   var obj = set.pop();
-  ok(!Ember.none(obj), 'pops up an item');
+  ok(!Ember.isNone(obj), 'pops up an item');
   equal(set.length, oldLength-1, 'length shorter by 1');
 });
 
-test("should pop false and 0", function(){
+test("should pop false and 0", function() {
   set = new Ember.Set(Ember.A([false]));
   ok(set.pop() === false, "should pop false");
 

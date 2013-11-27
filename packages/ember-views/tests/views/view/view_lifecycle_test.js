@@ -9,7 +9,7 @@ module("views/view/view_lifecycle_test - pre-render", {
 
   teardown: function() {
     if (view) {
-      Ember.run(function(){
+      Ember.run(function() {
         view.destroy();
       });
     }
@@ -33,7 +33,7 @@ test("should create and append a DOM element after bindings have synced", functi
       fakeThing: 'controllerPropertyValue'
     });
 
-    view = Ember.View.create({
+    view = Ember.View.createWithMixins({
       fooBinding: 'ViewTest.fakeController.fakeThing',
 
       render: function(buffer) {
@@ -92,7 +92,7 @@ module("views/view/view_lifecycle_test - in render", {
 
   teardown: function() {
     if (view) {
-      Ember.run(function(){
+      Ember.run(function() {
         view.destroy();
       });
     }
@@ -122,10 +122,8 @@ test("appendChild should work inside a template", function() {
      "The appended child is visible");
 });
 
-test("rerender should work inside a template", function() {
-  try {
-    Ember.TESTING_DEPRECATION = true;
-
+test("rerender should throw inside a template", function() {
+  raises(function() {
     Ember.run(function() {
       var renderCount = 0;
       view = Ember.View.create({
@@ -150,20 +148,49 @@ test("rerender should work inside a template", function() {
 
       view.appendTo("#qunit-fixture");
     });
-  } finally {
-    Ember.TESTING_DEPRECATION = false;
-  }
-
-  equal(view.$('div:nth-child(1)').length, 1);
-  equal(view.$('div:nth-child(1)').text(), '2');
-  equal(view.$('div:nth-child(2)').length, 1);
-  equal(view.$('div:nth-child(2)').text(), 'Inside child2');
+  }, /Something you did caused a view to re-render after it rendered but before it was inserted into the DOM./);
 });
+
+module("views/view/view_lifecycle_test - hasElement", {
+  teardown: function() {
+    if (view) {
+      Ember.run(function() {
+        view.destroy();
+      });
+    }
+  }
+});
+
+test("createElement puts the view into the hasElement state", function() {
+  view = Ember.View.create({
+    render: function(buffer) { buffer.push('hello'); }
+  });
+
+  Ember.run(function() {
+    view.createElement();
+  });
+
+  equal(view.currentState, Ember.View.states.hasElement, "the view is in the hasElement state");
+});
+
+test("trigger rerender on a view in the hasElement state doesn't change its state to inDOM", function() {
+  view = Ember.View.create({
+    render: function(buffer) { buffer.push('hello'); }
+  });
+
+  Ember.run(function() {
+    view.createElement();
+    view.rerender();
+  });
+
+  equal(view.currentState, Ember.View.states.hasElement, "the view is still in the hasElement state");
+});
+
 
 module("views/view/view_lifecycle_test - in DOM", {
   teardown: function() {
     if (view) {
-      Ember.run(function(){
+      Ember.run(function() {
         view.destroy();
       });
     }
@@ -305,10 +332,10 @@ test("should throw an exception when rerender is called after view is destroyed"
 
   raises(function() {
     view.rerender();
-  }, null, "throws an exception when calling appendChild");
+  }, null, "throws an exception when calling rerender");
 });
 
-test("should throw an exception when rerender is called after view is destroyed", function() {
+test("should throw an exception when destroyElement is called after view is destroyed", function() {
   Ember.run(function() {
     view = Ember.View.create({
       template: tmpl('foo')
@@ -323,6 +350,26 @@ test("should throw an exception when rerender is called after view is destroyed"
 
   raises(function() {
     view.destroyElement();
-  }, null, "throws an exception when calling appendChild");
+  }, null, "throws an exception when calling destroyElement");
+});
+
+test("trigger rerender on a view in the inDOM state keeps its state as inDOM", function() {
+  Ember.run(function() {
+    view = Ember.View.create({
+      template: tmpl('foo')
+    });
+
+    view.append();
+  });
+
+  Ember.run(function() {
+    view.rerender();
+  });
+
+  equal(view.currentState, Ember.View.states.inDOM, "the view is still in the inDOM state");
+
+  Ember.run(function() {
+    view.destroy();
+  });
 });
 

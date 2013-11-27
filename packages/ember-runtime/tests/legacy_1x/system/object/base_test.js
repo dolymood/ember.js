@@ -26,14 +26,6 @@ var obj, obj1, don, don1 ; // global variables
 
 var get = Ember.get, set = Ember.set;
 
-function inArray(item, array) {
-  var len = array.length, idx;
-  for (idx=0; idx<len; idx++) {
-    if (array[idx] === item) { return idx; }
-  }
-  return -1;
-}
-
 module("A new Ember.Object instance", {
 
   setup: function() {
@@ -80,21 +72,21 @@ module("Ember.Object observers", {
     };
 
     // create an object
-    obj = Ember.Object.create({
+    obj = Ember.Object.createWithMixins({
       prop1: null,
 
       // normal observer
-      observer: Ember.observer(function(){
+      observer: Ember.observer("prop1", function() {
         this._normal = true;
-      }, "prop1"),
+      }),
 
-      globalObserver: Ember.observer(function() {
+      globalObserver: Ember.observer("TestNamespace.obj.value", function() {
         this._global = true;
-      }, "TestNamespace.obj.value"),
+      }),
 
-      bothObserver: Ember.observer(function() {
+      bothObserver: Ember.observer("prop1", "TestNamespace.obj.value", function() {
         this._both = true;
-      }, "prop1", "TestNamespace.obj.value")
+      })
     });
 
   }
@@ -142,7 +134,7 @@ module("Ember.Object superclass and subclasses", {
   }
 });
 
-test("Checking the detect() function on an object and its subclass", function(){
+test("Checking the detect() function on an object and its subclass", function() {
 	equal(obj.detect(obj1), true);
 	equal(obj1.detect(obj), false);
 });

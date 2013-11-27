@@ -24,7 +24,7 @@ test("should dispatch events to views", function() {
   var childKeyDownCalled = 0;
   var parentKeyDownCalled = 0;
 
-  view = Ember.ContainerView.create({
+  view = Ember.ContainerView.createWithMixins({
     childViews: ['child'],
 
     child: Ember.View.extend({
@@ -55,7 +55,7 @@ test("should dispatch events to views", function() {
   });
 
   Ember.run(function() {
-    view.append();
+    view.appendTo('#qunit-fixture');
   });
 
   view.$().trigger('mousedown');
@@ -80,7 +80,7 @@ test("should dispatch events to views", function() {
 test("should not dispatch events to views not inDOM", function() {
   var receivedEvent;
 
-  view = Ember.View.create({
+  view = Ember.View.createWithMixins({
     render: function(buffer) {
       buffer.push('some <span id="awesome">awesome</span> content');
       this._super(buffer);
@@ -158,7 +158,7 @@ test("events should stop propagating if the view is destroyed", function() {
     }
   });
 
-  Ember.get(parentView, 'childViews').pushObject(view);
+  parentView.pushObject(view);
 
   Ember.run(function() {
     parentView.append();
@@ -220,7 +220,7 @@ test("should dispatch events to nearest event manager", function() {
 test("event manager should be able to re-dispatch events to view", function() {
 
   var receivedEvent=0;
-  view = Ember.ContainerView.create({
+  view = Ember.ContainerView.createWithMixins({
     elementId: 'containerView',
 
     eventManager: Ember.Object.create({
@@ -256,4 +256,78 @@ test("event manager should be able to re-dispatch events to view", function() {
 
   Ember.$('#nestedView').trigger('mousedown');
   equal(receivedEvent, 2, "event should go to manager and not view");
+});
+
+test("event handlers should be wrapped in a run loop", function() {
+  expect(1);
+
+  view = Ember.View.createWithMixins({
+    elementId: 'test-view',
+
+    eventManager: Ember.Object.create({
+      mouseDown: function() {
+        ok(Ember.run.currentRunLoop, 'a run loop should have started');
+      }
+    })
+  });
+
+  Ember.run(function() { view.append(); });
+
+  Ember.$('#test-view').trigger('mousedown');
+});
+
+module("Ember.EventDispatcher#setup", {
+  setup: function() {
+    Ember.run(function() {
+      dispatcher = Ember.EventDispatcher.create({
+        rootElement: "#qunit-fixture"
+      });
+    });
+  },
+
+  teardown: function() {
+    Ember.run(function() {
+      if (view) { view.destroy(); }
+      dispatcher.destroy();
+    });
+  }
+});
+
+test("additional events which should be listened on can be passed", function () {
+  expect(1);
+
+  Ember.run(function () {
+    dispatcher.setup({ myevent: "myEvent" });
+
+    view = Ember.View.create({
+      elementId: "leView",
+      myEvent: function() {
+        ok(true, "custom event has been triggered");
+      }
+    }).appendTo( dispatcher.get("rootElement") );
+  });
+
+  Ember.$("#leView").trigger("myevent");
+});
+
+test("additional events and rootElement can be specified", function () {
+  expect(3);
+
+  Ember.$("#qunit-fixture").append("<div class='custom-root'></div>");
+
+  Ember.run(function () {
+    dispatcher.setup({ myevent: "myEvent" }, ".custom-root");
+
+    view = Ember.View.create({
+      elementId: "leView",
+      myEvent: function() {
+        ok(true, "custom event has been triggered");
+      }
+    }).appendTo( dispatcher.get("rootElement") );
+  });
+
+  ok(Ember.$(".custom-root").hasClass("ember-application"), "the custom rootElement is used");
+  equal(dispatcher.get("rootElement"), ".custom-root", "the rootElement is updated");
+
+  Ember.$("#leView").trigger("myevent");
 });

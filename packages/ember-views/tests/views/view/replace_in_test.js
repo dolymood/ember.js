@@ -8,7 +8,7 @@ module("Ember.View - replaceIn()", {
   },
 
   teardown: function() {
-    Ember.run(function(){
+    Ember.run(function() {
       view.destroy();
     });
   }
@@ -29,6 +29,17 @@ test("should be added to the specified element when calling replaceIn()", functi
   ok(viewElem.length > 0, "creates and replaces the view's element");
 });
 
+test("raises an assert when a target does not exist in the DOM", function() {
+  view = View.create();
+
+  expectAssertion(function() {
+    Ember.run(function() {
+      view.replaceIn('made-up-target');
+    });
+  });
+});
+
+
 test("should remove previous elements when calling replaceIn()", function() {
   Ember.$("#qunit-fixture").html('<div id="menu"><p>Foo</p></div>');
   var viewElem = Ember.$('#menu').children();
@@ -45,6 +56,17 @@ test("should remove previous elements when calling replaceIn()", function() {
 
 });
 
+test("should move the view to the inDOM state after replacing", function() {
+  Ember.$("#qunit-fixture").html('<div id="menu"></div>');
+  view = View.create();
+
+  Ember.run(function() {
+    view.replaceIn('#menu');
+  });
+
+  equal(view.currentState, Ember.View.states.inDOM, "the view is in the inDOM state");
+});
+
 module("Ember.View - replaceIn() in a view hierarchy", {
   setup: function() {
     View = Ember.ContainerView.extend({
@@ -56,7 +78,7 @@ module("Ember.View - replaceIn() in a view hierarchy", {
   },
 
   teardown: function() {
-    Ember.run(function(){
+    Ember.run(function() {
       view.destroy();
     });
   }

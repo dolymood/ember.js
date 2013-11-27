@@ -1,27 +1,30 @@
-var set = Ember.set, get = Ember.get;
+var set = Ember.set, get = Ember.get, container, view;
 
-module("Ember.View - Layout Functionality");
+module("Ember.View - Layout Functionality", {
+  setup: function() {
+    container = new Ember.Container();
+    container.optionsForType('template', { instantiate: false });
+  },
+  teardown: function() {
+    Ember.run(function() {
+      view.destroy();
+    });
+  }
+});
 
 test("should call the function of the associated layout", function() {
-  var view;
   var templateCalled = 0, layoutCalled = 0;
 
+  container.register('template:template', function() { templateCalled++; });
+  container.register('template:layout', function() { layoutCalled++; });
+
   view = Ember.View.create({
+    container: container,
     layoutName: 'layout',
-    templateName: 'template',
-
-    templates: {
-      template: function() {
-        templateCalled++;
-      },
-
-      layout: function() {
-        layoutCalled++;
-      }
-    }
+    templateName: 'template'
   });
 
-  Ember.run(function(){
+  Ember.run(function() {
     view.createElement();
   });
 
@@ -30,23 +33,20 @@ test("should call the function of the associated layout", function() {
 });
 
 test("should call the function of the associated template with itself as the context", function() {
-  var view;
+  container.register('template:testTemplate', function(dataSource) {
+    return "<h1 id='twas-called'>template was called for " + get(dataSource, 'personName') + "</h1>";
+  });
 
   view = Ember.View.create({
-    layoutName: 'test_template',
+    container: container,
+    layoutName: 'testTemplate',
 
     context: {
       personName: "Tom DAAAALE"
-    },
-
-    templates: Ember.Object.create({
-      test_template: function(dataSource) {
-        return "<h1 id='twas-called'>template was called for " + get(dataSource, 'personName') + "</h1>";
-      }
-    })
+    }
   });
 
-  Ember.run(function(){
+  Ember.run(function() {
     view.createElement();
   });
 
@@ -54,7 +54,7 @@ test("should call the function of the associated template with itself as the con
 });
 
 test("should fall back to defaultTemplate if neither template nor templateName are provided", function() {
-  var View, view;
+  var View;
 
   View = Ember.View.extend({
     defaultLayout: function(dataSource) { return "<h1 id='twas-called'>template was called for " + get(dataSource, 'personName') + "</h1>"; }
@@ -66,7 +66,7 @@ test("should fall back to defaultTemplate if neither template nor templateName a
     }
   });
 
-  Ember.run(function(){
+  Ember.run(function() {
     view.createElement();
   });
 
@@ -74,7 +74,7 @@ test("should fall back to defaultTemplate if neither template nor templateName a
 });
 
 test("should not use defaultLayout if layout is provided", function() {
-  var View, view;
+  var View;
 
   View = Ember.View.extend({
     layout:  function() { return "foo"; },
@@ -82,7 +82,7 @@ test("should not use defaultLayout if layout is provided", function() {
   });
 
   view = View.create();
-  Ember.run(function(){
+  Ember.run(function() {
     view.createElement();
   });
 
@@ -91,7 +91,7 @@ test("should not use defaultLayout if layout is provided", function() {
 });
 
 test("the template property is available to the layout template", function() {
-  var view = Ember.View.create({
+  view = Ember.View.create({
     template: function(context, options) {
       options.data.buffer.push(" derp");
     },
@@ -102,9 +102,10 @@ test("the template property is available to the layout template", function() {
     }
   });
 
-  Ember.run(function(){
+  Ember.run(function() {
     view.createElement();
   });
 
   equal("Herp derp", view.$().text(), "the layout has access to the template");
 });
+

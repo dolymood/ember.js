@@ -10,24 +10,25 @@ require('ember-handlebars/views/metamorph_view');
 var get = Ember.get, set = Ember.set, fmt = Ember.String.fmt;
 var handlebarsGet = Ember.Handlebars.get, normalizePath = Ember.Handlebars.normalizePath;
 var forEach = Ember.ArrayPolyfills.forEach;
+var o_create = Ember.create;
 
 var EmberHandlebars = Ember.Handlebars, helpers = EmberHandlebars.helpers;
 
+function exists(value) {
+  return !Ember.isNone(value);
+}
+
 // Binds a property into the DOM. This will create a hook in DOM that the
 // KVO system will look for and update if the property changes.
-function bind(property, options, preserveContext, shouldDisplay, valueNormalizer) {
+function bind(property, options, preserveContext, shouldDisplay, valueNormalizer, childProperties) {
   var data = options.data,
       fn = options.fn,
       inverse = options.inverse,
       view = data.view,
       currentContext = this,
-      pathRoot, path, normalized,
-      observer;
+      normalized, observer, i;
 
   normalized = normalizePath(currentContext, property, data);
-
-  pathRoot = normalized.root;
-  path = normalized.path;
 
   // Set up observers for observable objects
   if ('object' === typeof this) {
@@ -36,9 +37,9 @@ function bind(property, options, preserveContext, shouldDisplay, valueNormalizer
         Ember.run.once(view, 'rerender');
       };
 
-      var template, context, result = handlebarsGet(pathRoot, path, options);
+      var template, context, result = handlebarsGet(currentContext, property, options);
 
-      result = valueNormalizer(result);
+      result = valueNormalizer ? valueNormalizer(result) : result;
 
       context = preserveContext ? currentContext : result;
       if (shouldDisplay(result)) {
@@ -58,8 +59,8 @@ function bind(property, options, preserveContext, shouldDisplay, valueNormalizer
         valueNormalizerFunc: valueNormalizer,
         displayTemplate: fn,
         inverseTemplate: inverse,
-        path: path,
-        pathRoot: pathRoot,
+        path: property,
+        pathRoot: currentContext,
         previousContext: currentContext,
         isEscaped: !options.hash.unescaped,
         templateData: options.data
@@ -67,7 +68,6 @@ function bind(property, options, preserveContext, shouldDisplay, valueNormalizer
 
       view.appendChild(bindView);
 
-      /** @private */
       observer = function() {
         Ember.run.scheduleOnce('render', bindView, 'rerenderIfNeeded');
       };
@@ -77,52 +77,47 @@ function bind(property, options, preserveContext, shouldDisplay, valueNormalizer
     // tells the Ember._HandlebarsBoundView to re-render. If property
     // is an empty string, we are printing the current context
     // object ({{this}}) so updating it is not our responsibility.
-    if (path !== '') {
-      Ember.addObserver(pathRoot, path, observer);
-
-      view.one('willClearRender', function() {
-        Ember.removeObserver(pathRoot, path, observer);
-      });
+    if (normalized.path !== '') {
+      view.registerObserver(normalized.root, normalized.path, observer);
+      if (childProperties) {
+        for (i=0; i<childProperties.length; i++) {
+          view.registerObserver(normalized.root, normalized.path+'.'+childProperties[i], observer);
+        }
+      }
     }
   } else {
     // The object is not observable, so just render it out and
     // be done with it.
-    data.buffer.push(handlebarsGet(pathRoot, path, options));
+    data.buffer.push(handlebarsGet(currentContext, property, options));
   }
 }
 
-function simpleBind(property, options) {
+EmberHandlebars.bind = bind;
+
+function simpleBind(currentContext, property, options) {
   var data = options.data,
       view = data.view,
-      currentContext = this,
-      pathRoot, path, normalized,
-      observer;
+      normalized, observer, pathRoot, output;
 
   normalized = normalizePath(currentContext, property, data);
-
   pathRoot = normalized.root;
-  path = normalized.path;
 
   // Set up observers for observable objects
-  if ('object' === typeof this) {
+  if (pathRoot && ('object' === typeof pathRoot)) {
     if (data.insideGroup) {
       observer = function() {
         Ember.run.once(view, 'rerender');
       };
 
-      var result = handlebarsGet(pathRoot, path, options);
+      var result = handlebarsGet(currentContext, property, options);
       if (result === null || result === undefined) { result = ""; }
       data.buffer.push(result);
     } else {
-      var bindView = Ember._SimpleHandlebarsView.create().setProperties({
-        path: path,
-        pathRoot: pathRoot,
-        isEscaped: !options.hash.unescaped,
-        previousContext: currentContext,
-        templateData: options.data
-      });
+      var bindView = new Ember._SimpleHandlebarsView(
+        property, currentContext, !options.hash.unescaped, options.data
+      );
 
-      view.createChildView(bindView);
+      bindView._parentView = view;
       view.appendChild(bindView);
 
       observer = function() {
@@ -134,24 +129,21 @@ function simpleBind(property, options) {
     // tells the Ember._HandlebarsBoundView to re-render. If property
     // is an empty string, we are printing the current context
     // object ({{this}}) so updating it is not our responsibility.
-    if (path !== '') {
-      Ember.addObserver(pathRoot, path, observer);
-
-      view.one('willClearRender', function() {
-        Ember.removeObserver(pathRoot, path, observer);
-      });
+    if (normalized.path !== '') {
+      view.registerObserver(normalized.root, normalized.path, observer);
     }
   } else {
     // The object is not observable, so just render it out and
     // be done with it.
-    data.buffer.push(handlebarsGet(pathRoot, path, options));
+    output = handlebarsGet(currentContext, property, options);
+    data.buffer.push((output === null || typeof output === 'undefined') ? '' : output);
   }
 }
 
 /**
   @private
 
-  '_triageMustache' is used internally select between a binding and helper for
+  '_triageMustache' is used internally select between a binding, helper, or component for
   the given context. Until this point, it would be hard to determine if the
   mustache is a property reference or a regular helper reference. This triage
   helper resolves that.
@@ -161,18 +153,43 @@ function simpleBind(property, options) {
   @method _triageMustache
   @for Ember.Handlebars.helpers
   @param {String} property Property/helperID to triage
-  @param {Function} fn Context to provide for rendering
+  @param {Object} options hash of template/rendering options
   @return {String} HTML string
 */
-EmberHandlebars.registerHelper('_triageMustache', function(property, fn) {
+EmberHandlebars.registerHelper('_triageMustache', function(property, options) {
   Ember.assert("You cannot pass more than one argument to the _triageMustache helper", arguments.length <= 2);
+
   if (helpers[property]) {
-    return helpers[property].call(this, fn);
+    return helpers[property].call(this, options);
   }
-  else {
-    return helpers.bind.apply(this, arguments);
+
+  var helper = Ember.Handlebars.resolveHelper(options.data.view.container, property);
+  if (helper) {
+    return helper.call(this, options);
   }
+
+  return helpers.bind.call(this, property, options);
 });
+
+Ember.Handlebars.resolveHelper = function(container, name) {
+
+  if (!container || name.indexOf('-') === -1) {
+    return;
+  }
+
+  var helper = container.lookup('helper:' + name);
+  if (!helper) {
+    var componentLookup = container.lookup('component-lookup:main');
+    Ember.assert("Could not find 'component-lookup:main' on the provided container, which is necessary for performing component lookups", componentLookup);
+
+    var Component = componentLookup.lookupFactory(name, container);
+    if (Component) {
+      helper = EmberHandlebars.makeViewHelper(Component);
+      container.register('helper:' + name, helper);
+    }
+  }
+  return helper;
+};
 
 /**
   @private
@@ -181,16 +198,16 @@ EmberHandlebars.registerHelper('_triageMustache', function(property, fn) {
   changes. For example, if you wanted to print the `title` property of
   `content`:
 
-  ``` handlebars
+  ```handlebars
   {{bind "content.title"}}
   ```
 
-  This will return the `title` property as a string, then create a new
-  observer at the specified path. If it changes, it will update the value in
-  DOM. Note that if you need to support IE7 and IE8 you must modify the
-  model objects properties using Ember.get() and Ember.set() for this to work as
-  it relies on Ember's KVO system.  For all other browsers this will be handled
-  for you automatically.
+  This will return the `title` property as a string, then create a new observer
+  at the specified path. If it changes, it will update the value in DOM. Note
+  that if you need to support IE7 and IE8 you must modify the model objects
+  properties using `Ember.get()` and `Ember.set()` for this to work as it
+  relies on Ember's KVO system. For all other browsers this will be handled for
+  you automatically.
 
   @method bind
   @for Ember.Handlebars.helpers
@@ -201,15 +218,13 @@ EmberHandlebars.registerHelper('_triageMustache', function(property, fn) {
 EmberHandlebars.registerHelper('bind', function(property, options) {
   Ember.assert("You cannot pass more than one argument to the bind helper", arguments.length <= 2);
 
-  var context = (options.contexts && options.contexts[0]) || this;
+  var context = (options.contexts && options.contexts.length) ? options.contexts[0] : this;
 
   if (!options.fn) {
-    return simpleBind.call(context, property, options);
+    return simpleBind(context, property, options);
   }
 
-  return bind.call(context, property, options, false, function(result) {
-    return !Ember.none(result);
-  });
+  return bind.call(context, property, options, false, exists);
 });
 
 /**
@@ -218,7 +233,7 @@ EmberHandlebars.registerHelper('bind', function(property, options) {
   Use the `boundIf` helper to create a conditional that re-evaluates
   whenever the truthiness of the bound value changes.
 
-  ``` handlebars
+  ```handlebars
   {{#boundIf "content.shouldDisplayTitle"}}
     {{content.title}}
   {{/boundIf}}
@@ -231,16 +246,19 @@ EmberHandlebars.registerHelper('bind', function(property, options) {
   @return {String} HTML string
 */
 EmberHandlebars.registerHelper('boundIf', function(property, fn) {
-  var context = (fn.contexts && fn.contexts[0]) || this;
+  var context = (fn.contexts && fn.contexts.length) ? fn.contexts[0] : this;
   var func = function(result) {
-    if (Ember.typeOf(result) === 'array') {
+    var truthy = result && get(result, 'isTruthy');
+    if (typeof truthy === 'boolean') { return truthy; }
+
+    if (Ember.isArray(result)) {
       return get(result, 'length') !== 0;
     } else {
       return !!result;
     }
   };
 
-  return bind.call(context, property, fn, true, func, func);
+  return bind.call(context, property, fn, true, func, func, ['isTruthy', 'length']);
 });
 
 /**
@@ -252,7 +270,7 @@ EmberHandlebars.registerHelper('boundIf', function(property, fn) {
 */
 EmberHandlebars.registerHelper('with', function(context, options) {
   if (arguments.length === 4) {
-    var keywordName, path, rootPath, normalized;
+    var keywordName, path, rootPath, normalized, contextPath;
 
     Ember.assert("If you pass more than one argument to the with helper, it must be in the form #with foo as bar", arguments[1] === "as");
     options = arguments[3];
@@ -261,8 +279,12 @@ EmberHandlebars.registerHelper('with', function(context, options) {
 
     Ember.assert("You must pass a block to the with helper", options.fn && options.fn !== Handlebars.VM.noop);
 
+    var localizedOptions = o_create(options);
+    localizedOptions.data = o_create(options.data);
+    localizedOptions.data.keywords = o_create(options.data.keywords || {});
+
     if (Ember.isGlobalPath(path)) {
-      Ember.bind(options.data.keywords, keywordName, path);
+      contextPath = path;
     } else {
       normalized = normalizePath(this, path, options.data);
       path = normalized.path;
@@ -271,16 +293,14 @@ EmberHandlebars.registerHelper('with', function(context, options) {
       // This is a workaround for the fact that you cannot bind separate objects
       // together. When we implement that functionality, we should use it here.
       var contextKey = Ember.$.expando + Ember.guidFor(rootPath);
-      options.data.keywords[contextKey] = rootPath;
-
+      localizedOptions.data.keywords[contextKey] = rootPath;
       // if the path is '' ("this"), just bind directly to the current context
-      var contextPath = path ? contextKey + '.' + path : contextKey;
-      Ember.bind(options.data.keywords, keywordName, contextPath);
+      contextPath = path ? contextKey + '.' + path : contextKey;
     }
 
-    return bind.call(this, path, options, true, function(result) {
-      return !Ember.none(result);
-    });
+    Ember.bind(localizedOptions.data.keywords, keywordName, contextPath);
+
+    return bind.call(this, path, localizedOptions, true, exists);
   } else {
     Ember.assert("You must pass exactly one argument to the with helper", arguments.length === 2);
     Ember.assert("You must pass a block to the with helper", options.fn && options.fn !== Handlebars.VM.noop);
@@ -290,7 +310,7 @@ EmberHandlebars.registerHelper('with', function(context, options) {
 
 
 /**
-  See `boundIf`
+  See [boundIf](/api/classes/Ember.Handlebars.helpers.html#method_boundIf)
 
   @method if
   @for Ember.Handlebars.helpers
@@ -325,21 +345,20 @@ EmberHandlebars.registerHelper('unless', function(context, options) {
 });
 
 /**
-  `bindAttr` allows you to create a binding between DOM element attributes and
+  `bind-attr` allows you to create a binding between DOM element attributes and
   Ember objects. For example:
 
-
-  ``` handlebars
-  <img {{bindAttr src="imageUrl" alt="imageTitle"}}>
+  ```handlebars
+  <img {{bind-attr src="imageUrl" alt="imageTitle"}}>
   ```
 
-  The above handlebars template will fill the `<img>`'s `src` attribute
-  will the value of the property referenced with `"imageUrl"` and its
-  `alt` attribute with the value of the property referenced with `"imageTitle"`.
+  The above handlebars template will fill the `<img>`'s `src` attribute will
+  the value of the property referenced with `"imageUrl"` and its `alt`
+  attribute with the value of the property referenced with `"imageTitle"`.
 
   If the rendering context of this template is the following object:
 
-  ``` javascript
+  ```javascript
   {
     imageUrl: 'http://lolcats.info/haz-a-funny',
     imageTitle: 'A humorous image of a cat'
@@ -348,100 +367,111 @@ EmberHandlebars.registerHelper('unless', function(context, options) {
 
   The resulting HTML output will be:
 
-  ``` html
-    <img src="http://lolcats.info/haz-a-funny" alt="A humorous image of a cat">
+  ```html
+  <img src="http://lolcats.info/haz-a-funny" alt="A humorous image of a cat">
   ```
 
-  `bindAttr` cannot redeclare existing DOM element attributes. The use
-  of `src` in the following `bindAttr` example will be ignored and the hard coded value
+  `bind-attr` cannot redeclare existing DOM element attributes. The use of `src`
+  in the following `bind-attr` example will be ignored and the hard coded value
   of `src="/failwhale.gif"` will take precedence:
 
-  ``` handlebars
-  <img src="/failwhale.gif" {{bindAttr src="imageUrl" alt="imageTitle"}}>
+  ```handlebars
+  <img src="/failwhale.gif" {{bind-attr src="imageUrl" alt="imageTitle"}}>
   ```
 
-  ### `bindAttr` and the `class` attribute
-  `bindAttr` supports a special syntax for handling a number of cases unique
+  ### `bind-attr` and the `class` attribute
+
+  `bind-attr` supports a special syntax for handling a number of cases unique
   to the `class` DOM element attribute. The `class` attribute combines
-  multiple discreet values into a single attribute as a space-delimited
-  list of strings. Each string can be
+  multiple discrete values into a single attribute as a space-delimited
+  list of strings. Each string can be:
 
-    * a string return value of an object's property.
-    * a boolean return value of an object's property
-    * a hard-coded value
+  * a string return value of an object's property.
+  * a boolean return value of an object's property
+  * a hard-coded value
 
-  A string return value works identically to other uses of `bindAttr`. The return
-  value of the property will become the value of the attribute. For example,
-  the following view and template:
+  A string return value works identically to other uses of `bind-attr`. The
+  return value of the property will become the value of the attribute. For
+  example, the following view and template:
 
-  ``` javascript
+  ```javascript
     AView = Ember.View.extend({
-      someProperty: function(){
+      someProperty: function() {
         return "aValue";
       }.property()
     })
   ```
 
-  ``` handlebars
-  <img {{bindAttr class="view.someProperty}}>
+  ```handlebars
+  <img {{bind-attr class="view.someProperty}}>
   ```
 
   Result in the following rendered output:
+
+  ```html
   <img class="aValue">
+  ```
 
   A boolean return value will insert a specified class name if the property
   returns `true` and remove the class name if the property returns `false`.
 
-  A class name is provided via the syntax `somePropertyName:class-name-if-true`.
+  A class name is provided via the syntax
+  `somePropertyName:class-name-if-true`.
 
-  ``` javascript
-    AView = Ember.View.extend({
-      someBool: true
-    })
+  ```javascript
+  AView = Ember.View.extend({
+    someBool: true
+  })
   ```
 
-  ``` handlebars
-  <img {{bindAttr class="view.someBool:class-name-if-true"}}>
+  ```handlebars
+  <img {{bind-attr class="view.someBool:class-name-if-true"}}>
   ```
 
   Result in the following rendered output:
+
+  ```html
   <img class="class-name-if-true">
+  ```
 
   An additional section of the binding can be provided if you want to
   replace the existing class instead of removing it when the boolean
   value changes:
 
-  ``` handlebars
-  <img {{bindAttr class="view.someBool:class-name-if-true:class-name-if-false"}}>
+  ```handlebars
+  <img {{bind-attr class="view.someBool:class-name-if-true:class-name-if-false"}}>
   ```
 
   A hard-coded value can be used by prepending `:` to the desired
   class name: `:class-name-to-always-apply`.
 
-  ``` handlebars
-  <img {{bindAttr class=":class-name-to-always-apply"}}>
+  ```handlebars
+  <img {{bind-attr class=":class-name-to-always-apply"}}>
   ```
 
   Results in the following rendered output:
+
+  ```html
   <img class="class-name-to-always-apply">
+  ```
 
   All three strategies - string return value, boolean return value, and
   hard-coded value – can be combined in a single declaration:
 
   ```handlebars
-  <img {{bindAttr class=":class-name-to-always-apply view.someBool:class-name-if-true view.someProperty"}}>
+  <img {{bind-attr class=":class-name-to-always-apply view.someBool:class-name-if-true view.someProperty"}}>
   ```
 
-  @method bindAttr
+  @method bind-attr
   @for Ember.Handlebars.helpers
   @param {Hash} options
   @return {String} HTML string
 */
-EmberHandlebars.registerHelper('bindAttr', function(options) {
+EmberHandlebars.registerHelper('bind-attr', function(options) {
 
   var attrs = options.hash;
 
-  Ember.assert("You must specify at least one hash argument to bindAttr", !!Ember.keys(attrs).length);
+  Ember.assert("You must specify at least one hash argument to bind-attr", !!Ember.keys(attrs).length);
 
   var view = options.data.view;
   var ret = [];
@@ -454,8 +484,9 @@ EmberHandlebars.registerHelper('bindAttr', function(options) {
 
   // Handle classes differently, as we can bind multiple classes
   var classBindings = attrs['class'];
-  if (classBindings !== null && classBindings !== undefined) {
+  if (classBindings != null) {
     var classResults = EmberHandlebars.bindClasses(this, classBindings, view, dataId, options);
+
     ret.push('class="' + Handlebars.Utils.escapeExpression(classResults.join(' ')) + '"');
     delete attrs['class'];
   }
@@ -466,16 +497,13 @@ EmberHandlebars.registerHelper('bindAttr', function(options) {
   // current value of the property as an attribute.
   forEach.call(attrKeys, function(attr) {
     var path = attrs[attr],
-        pathRoot, normalized;
+        normalized;
 
-    Ember.assert(fmt("You must provide a String for a bound attribute, not %@", [path]), typeof path === 'string');
+    Ember.assert(fmt("You must provide an expression as the value of bound attribute. You specified: %@=%@", [attr, path]), typeof path === 'string');
 
     normalized = normalizePath(ctx, path, options.data);
 
-    pathRoot = normalized.root;
-    path = normalized.path;
-
-    var value = (path === 'this') ? pathRoot : handlebarsGet(pathRoot, path, options),
+    var value = (path === 'this') ? normalized.root : handlebarsGet(ctx, path, options),
         type = Ember.typeOf(value);
 
     Ember.assert(fmt("Attributes must be numbers, strings or booleans, not %@", [value]), value === null || value === undefined || type === 'number' || type === 'string' || type === 'boolean');
@@ -483,7 +511,7 @@ EmberHandlebars.registerHelper('bindAttr', function(options) {
     var observer, invoker;
 
     observer = function observer() {
-      var result = handlebarsGet(pathRoot, path, options);
+      var result = handlebarsGet(ctx, path, options);
 
       Ember.assert(fmt("Attributes must be numbers, strings or booleans, not %@", [result]), result === null || result === undefined || typeof result === 'number' || typeof result === 'string' || typeof result === 'boolean');
 
@@ -494,26 +522,20 @@ EmberHandlebars.registerHelper('bindAttr', function(options) {
       // In that case, we can assume the template has been re-rendered
       // and we need to clean up the observer.
       if (!elem || elem.length === 0) {
-        Ember.removeObserver(pathRoot, path, invoker);
+        Ember.removeObserver(normalized.root, normalized.path, invoker);
         return;
       }
 
       Ember.View.applyAttributeBindings(elem, attr, result);
     };
 
-    invoker = function() {
-      Ember.run.scheduleOnce('render', observer);
-    };
-
     // Add an observer to the view for when the property changes.
     // When the observer fires, find the element using the
     // unique data id and update the attribute to the new value.
-    if (path !== 'this') {
-      Ember.addObserver(pathRoot, path, invoker);
-
-      view.one('willClearRender', function() {
-        Ember.removeObserver(pathRoot, path, invoker);
-      });
+    // Note: don't add observer when path is 'this' or path
+    // is whole keyword e.g. {{#each x in list}} ... {{bind-attr attr="x"}}
+    if (path !== 'this' && !(normalized.isKeyword && normalized.path === '' )) {
+      view.registerObserver(normalized.root, normalized.path, observer);
     }
 
     // if this changes, also change the logic in ember-views/lib/views/view.js
@@ -532,6 +554,18 @@ EmberHandlebars.registerHelper('bindAttr', function(options) {
 });
 
 /**
+  See `bind-attr`
+
+  @method bindAttr
+  @for Ember.Handlebars.helpers
+  @deprecated
+  @param {Function} context
+  @param {Hash} options
+  @return {String} HTML string
+*/
+EmberHandlebars.registerHelper('bindAttr', EmberHandlebars.helpers['bind-attr']);
+
+/**
   @private
 
   Helper that, given a space-separated string of property paths and a context,
@@ -548,8 +582,10 @@ EmberHandlebars.registerHelper('bindAttr', function(options) {
   @method bindClasses
   @for Ember.Handlebars
   @param {Ember.Object} context The context from which to lookup properties
-  @param {String} classBindings A string, space-separated, of class bindings to use
-  @param {Ember.View} view The view in which observers should look for the element to update
+  @param {String} classBindings A string, space-separated, of class bindings
+    to use
+  @param {Ember.View} view The view in which observers should look for the
+    element to update
   @param {Srting} bindAttrId Optional bindAttr id used to lookup elements
   @return {Array} An array of class names to add
 */
@@ -601,7 +637,7 @@ EmberHandlebars.bindClasses = function(context, classBindings, view, bindAttrId,
     // class name.
     observer = function() {
       // Get the current value of the property
-      newClass = classStringForPath(pathRoot, parsedPath, options);
+      newClass = classStringForPath(context, parsedPath, options);
       elem = bindAttrId ? view.$("[data-bindattr-" + bindAttrId + "='" + bindAttrId + "']") : view.$();
 
       // If we can't find the element anymore, a parent template has been
@@ -625,21 +661,13 @@ EmberHandlebars.bindClasses = function(context, classBindings, view, bindAttrId,
       }
     };
 
-    invoker = function() {
-      Ember.run.scheduleOnce('render', observer);
-    };
-
     if (path !== '' && path !== 'this') {
-      Ember.addObserver(pathRoot, path, invoker);
-
-      view.one('willClearRender', function() {
-        Ember.removeObserver(pathRoot, path, invoker);
-      });
+      view.registerObserver(pathRoot, path, observer);
     }
 
     // We've already setup the observer; now we just need to figure out the
     // correct behavior right now on the first pass through.
-    value = classStringForPath(pathRoot, parsedPath, options);
+    value = classStringForPath(context, parsedPath, options);
 
     if (value) {
       ret.push(value);

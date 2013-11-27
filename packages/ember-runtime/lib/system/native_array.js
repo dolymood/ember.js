@@ -1,3 +1,4 @@
+require('ember-metal/enumerable_utils');
 require('ember-runtime/mixins/observable');
 require('ember-runtime/mixins/mutable_array');
 require('ember-runtime/mixins/copyable');
@@ -8,9 +9,9 @@ require('ember-runtime/mixins/copyable');
 */
 
 
-var get = Ember.get, set = Ember.set;
+var get = Ember.get, set = Ember.set, replace = Ember.EnumerableUtils._replace;
 
-// Add Ember.Array to Array.prototype.  Remove methods with native
+// Add Ember.Array to Array.prototype. Remove methods with native
 // implementations and supply some more optimized versions of generic methods
 // because they are so common.
 var NativeArray = Ember.Mixin.create(Ember.MutableArray, Ember.Observable, Ember.Copyable, {
@@ -30,23 +31,22 @@ var NativeArray = Ember.Mixin.create(Ember.MutableArray, Ember.Observable, Ember
   // primitive for array support.
   replace: function(idx, amt, objects) {
 
-    if (this.isFrozen) throw Ember.FROZEN_ERROR ;
+    if (this.isFrozen) throw Ember.FROZEN_ERROR;
 
     // if we replaced exactly the same number of items, then pass only the
-    // replaced range.  Otherwise, pass the full remaining array length
+    // replaced range. Otherwise, pass the full remaining array length
     // since everything has shifted
     var len = objects ? get(objects, 'length') : 0;
     this.arrayContentWillChange(idx, amt, len);
 
-    if (!objects || objects.length === 0) {
-      this.splice(idx, amt) ;
+    if (len === 0) {
+      this.splice(idx, amt);
     } else {
-      var args = [idx, amt].concat(objects) ;
-      this.splice.apply(this,args) ;
+      replace(this, idx, amt, objects);
     }
 
     this.arrayContentDidChange(idx, amt, len);
-    return this ;
+    return this;
   },
 
   // If you ask for an unknown property, then try to collect the value
@@ -87,7 +87,11 @@ var NativeArray = Ember.Mixin.create(Ember.MutableArray, Ember.Observable, Ember
     return -1;
   },
 
-  copy: function() {
+  copy: function(deep) {
+    if (deep) {
+      return this.map(function(item) { return Ember.copy(item, true); });
+    }
+
     return this.slice();
   }
 });
@@ -104,37 +108,64 @@ if (ignore.length>0) {
 
 /**
   The NativeArray mixin contains the properties needed to to make the native
-  Array support Ember.MutableArray and all of its dependent APIs.  Unless you
-  have Ember.EXTEND_PROTOTYPES or Ember.EXTEND_PROTOTYPES.Array set to false, this
-  will be applied automatically. Otherwise you can apply the mixin at anytime by
-  calling `Ember.NativeArray.activate`.
+  Array support Ember.MutableArray and all of its dependent APIs. Unless you
+  have `Ember.EXTEND_PROTOTYPES` or `Ember.EXTEND_PROTOTYPES.Array` set to
+  false, this will be applied automatically. Otherwise you can apply the mixin
+  at anytime by calling `Ember.NativeArray.activate`.
 
   @class NativeArray
   @namespace Ember
-  @extends Ember.Mixin
   @uses Ember.MutableArray
-  @uses Ember.MutableEnumerable
+  @uses Ember.Observable
   @uses Ember.Copyable
-  @uses Ember.Freezable
 */
 Ember.NativeArray = NativeArray;
 
 /**
-  Creates an Ember.NativeArray from an Array like object.
-  Does not modify the original object.
+  Creates an `Ember.NativeArray` from an Array like object.
+  Does not modify the original object. Ember.A is not needed if
+  `Ember.EXTEND_PROTOTYPES` is `true` (the default value). However,
+  it is recommended that you use Ember.A when creating addons for
+  ember or when you can not guarantee that `Ember.EXTEND_PROTOTYPES`
+  will be `true`.
+
+  Example
+
+  ```js
+  var Pagination = Ember.CollectionView.extend({
+    tagName: 'ul',
+    classNames: ['pagination'],
+    init: function() {
+      this._super();
+      if (!this.get('content')) {
+        this.set('content', Ember.A([]));
+      }
+    }
+  });
+  ```
 
   @method A
   @for Ember
   @return {Ember.NativeArray}
 */
-Ember.A = function(arr){
+Ember.A = function(arr) {
   if (arr === undefined) { arr = []; }
   return Ember.Array.detect(arr) ? arr : Ember.NativeArray.apply(arr);
 };
 
 /**
-  Activates the mixin on the Array.prototype if not already applied.  Calling
-  this method more than once is safe.
+  Activates the mixin on the Array.prototype if not already applied. Calling
+  this method more than once is safe. This will be called when ember is loaded
+  unless you have `Ember.EXTEND_PROTOTYPES` or `Ember.EXTEND_PROTOTYPES.Array`
+  set to `false`.
+
+  Example
+
+  ```js
+  if (Ember.EXTEND_PROTOTYPES === true || Ember.EXTEND_PROTOTYPES.Array) {
+    Ember.NativeArray.activate();
+  }
+  ```
 
   @method activate
   @for Ember.NativeArray

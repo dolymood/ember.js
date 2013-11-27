@@ -4,7 +4,8 @@
 */
 
 var get = Ember.get, set = Ember.set;
-var popstateReady = false;
+var popstateFired = false;
+var supportsHistoryState = window.history && 'state' in window.history;
 
 /**
   Ember.HistoryLocation implements the location API using the browser's
@@ -15,6 +16,7 @@ var popstateReady = false;
   @extends Ember.Object
 */
 Ember.HistoryLocation = Ember.Object.extend({
+  implementation: 'history',
 
   init: function() {
     set(this, 'location', get(this, 'location') || window.location);
@@ -29,8 +31,8 @@ Ember.HistoryLocation = Ember.Object.extend({
     @method initState
   */
   initState: function() {
-    this.replaceState(get(this, 'location').pathname);
-    set(this, 'history', window.history);
+    set(this, 'history', get(this, 'history') || window.history);
+    this.replaceState(this.formatURL(this.getURL()));
   },
 
   /**
@@ -44,12 +46,25 @@ Ember.HistoryLocation = Ember.Object.extend({
   /**
     @private
 
-    Returns the current `location.pathname`.
+    Returns the current `location.pathname` without rootURL
 
     @method getURL
+    @return url {String}
   */
   getURL: function() {
-    return get(this, 'location').pathname;
+    var rootURL = get(this, 'rootURL'),
+        location = get(this, 'location'),
+        path = location.pathname;
+
+    rootURL = rootURL.replace(/\/$/, '');
+    var url = path.replace(rootURL, '');
+
+    if (Ember.FEATURES.isEnabled("query-params")) {
+      var search = location.search || '';
+      url += search;
+    }
+
+    return url;
   },
 
   /**
@@ -61,11 +76,29 @@ Ember.HistoryLocation = Ember.Object.extend({
     @param path {String}
   */
   setURL: function(path) {
+    var state = this.getState();
     path = this.formatURL(path);
 
-    if (this.getState() && this.getState().path !== path) {
-      popstateReady = true;
+    if (state && state.path !== path) {
       this.pushState(path);
+    }
+  },
+
+  /**
+    @private
+
+    Uses `history.replaceState` to update the url without a page reload
+    or history modification.
+
+    @method replaceURL
+    @param path {String}
+  */
+  replaceURL: function(path) {
+    var state = this.getState();
+    path = this.formatURL(path);
+
+    if (state && state.path !== path) {
+      this.replaceState(path);
     }
   },
 
@@ -73,11 +106,14 @@ Ember.HistoryLocation = Ember.Object.extend({
    @private
 
    Get the current `history.state`
+   Polyfill checks for native browser support and falls back to retrieving
+   from a private _historyState variable
 
    @method getState
+   @return state {Object}
   */
   getState: function() {
-    return get(this, 'history').state;
+    return supportsHistoryState ? get(this, 'history').state : this._historyState;
   },
 
   /**
@@ -89,7 +125,17 @@ Ember.HistoryLocation = Ember.Object.extend({
    @param path {String}
   */
   pushState: function(path) {
-    window.history.pushState({ path: path }, null, path);
+    var state = { path: path };
+
+    get(this, 'history').pushState(state, null, path);
+
+    // store state if browser doesn't support `history.state`
+    if (!supportsHistoryState) {
+      this._historyState = state;
+    }
+
+    // used for webkit workaround
+    this._previousURL = this.getURL();
   },
 
   /**
@@ -101,7 +147,17 @@ Ember.HistoryLocation = Ember.Object.extend({
    @param path {String}
   */
   replaceState: function(path) {
-    window.history.replaceState({ path: path }, null, path);
+    var state = { path: path };
+
+    get(this, 'history').replaceState(state, null, path);
+
+    // store state if browser doesn't support `history.state`
+    if (!supportsHistoryState) {
+      this._historyState = state;
+    }
+
+    // used for webkit workaround
+    this._previousURL = this.getURL();
   },
 
   /**
@@ -114,13 +170,16 @@ Ember.HistoryLocation = Ember.Object.extend({
     @param callback {Function}
   */
   onUpdateURL: function(callback) {
-    var guid = Ember.guidFor(this);
+    var guid = Ember.guidFor(this),
+        self = this;
 
-    Ember.$(window).bind('popstate.ember-location-'+guid, function(e) {
-      if(!popstateReady) {
-        return;
+    Ember.$(window).on('popstate.ember-location-'+guid, function(e) {
+      // Ignore initial page load popstate event in Chrome
+      if (!popstateFired) {
+        popstateFired = true;
+        if (self.getURL() === self._previousURL) { return; }
       }
-      callback(location.pathname);
+      callback(self.getURL());
     });
   },
 
@@ -131,6 +190,7 @@ Ember.HistoryLocation = Ember.Object.extend({
 
     @method formatURL
     @param url {String}
+    @return formatted url {String}
   */
   formatURL: function(url) {
     var rootURL = get(this, 'rootURL');
@@ -142,11 +202,16 @@ Ember.HistoryLocation = Ember.Object.extend({
     return rootURL + url;
   },
 
+  /**
+    @private
+
+    Cleans up the HistoryLocation event listener.
+
+    @method willDestroy
+  */
   willDestroy: function() {
     var guid = Ember.guidFor(this);
 
-    Ember.$(window).unbind('popstate.ember-location-'+guid);
+    Ember.$(window).off('popstate.ember-location-'+guid);
   }
 });
-
-Ember.Location.registerImplementation('history', Ember.HistoryLocation);

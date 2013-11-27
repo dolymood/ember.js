@@ -15,7 +15,7 @@ module("Ember.View#$", {
   },
 
   teardown: function() {
-    Ember.run(function(){
+    Ember.run(function() {
       view.destroy();
     });
   }
@@ -26,6 +26,10 @@ test("returns undefined if no element", function() {
   ok(!get(view, 'element'), 'precond - should have no element');
   equal(view.$(), undefined, 'should return undefined');
   equal(view.$('span'), undefined, 'should undefined if filter passed');
+
+  Ember.run(function() {
+    view.destroy();
+  });
 });
 
 test("returns jQuery object selecting element if provided", function() {

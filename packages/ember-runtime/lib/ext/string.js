@@ -15,12 +15,17 @@ var fmt = Ember.String.fmt,
     decamelize = Ember.String.decamelize,
     dasherize = Ember.String.dasherize,
     underscore = Ember.String.underscore,
+    capitalize = Ember.String.capitalize,
     classify = Ember.String.classify;
+
+if (Ember.FEATURES.isEnabled("string-humanize")) {
+    var humanize = Ember.String.humanize;
+}
 
 if (Ember.EXTEND_PROTOTYPES === true || Ember.EXTEND_PROTOTYPES.String) {
 
   /**
-    See {{#crossLink "Ember.String/fmt"}}{{/crossLink}}
+    See [Ember.String.fmt](/api/classes/Ember.String.html#method_fmt).
 
     @method fmt
     @for String
@@ -30,7 +35,7 @@ if (Ember.EXTEND_PROTOTYPES === true || Ember.EXTEND_PROTOTYPES.String) {
   };
 
   /**
-    See {{#crossLink "Ember.String/w"}}{{/crossLink}}
+    See [Ember.String.w](/api/classes/Ember.String.html#method_w).
 
     @method w
     @for String
@@ -40,7 +45,7 @@ if (Ember.EXTEND_PROTOTYPES === true || Ember.EXTEND_PROTOTYPES.String) {
   };
 
   /**
-    See {{#crossLink "Ember.String/loc"}}{{/crossLink}}
+    See [Ember.String.loc](/api/classes/Ember.String.html#method_loc).
 
     @method loc
     @for String
@@ -50,7 +55,7 @@ if (Ember.EXTEND_PROTOTYPES === true || Ember.EXTEND_PROTOTYPES.String) {
   };
 
   /**
-    See {{#crossLink "Ember.String/camelize"}}{{/crossLink}}
+    See [Ember.String.camelize](/api/classes/Ember.String.html#method_camelize).
 
     @method camelize
     @for String
@@ -60,7 +65,7 @@ if (Ember.EXTEND_PROTOTYPES === true || Ember.EXTEND_PROTOTYPES.String) {
   };
 
   /**
-    See {{#crossLink "Ember.String/decamelize"}}{{/crossLink}}
+    See [Ember.String.decamelize](/api/classes/Ember.String.html#method_decamelize).
 
     @method decamelize
     @for String
@@ -70,7 +75,7 @@ if (Ember.EXTEND_PROTOTYPES === true || Ember.EXTEND_PROTOTYPES.String) {
   };
 
   /**
-    See {{#crossLink "Ember.String/dasherize"}}{{/crossLink}}
+    See [Ember.String.dasherize](/api/classes/Ember.String.html#method_dasherize).
 
     @method dasherize
     @for String
@@ -80,7 +85,7 @@ if (Ember.EXTEND_PROTOTYPES === true || Ember.EXTEND_PROTOTYPES.String) {
   };
 
   /**
-    See {{#crossLink "Ember.String/underscore"}}{{/crossLink}}
+    See [Ember.String.underscore](/api/classes/Ember.String.html#method_underscore).
 
     @method underscore
     @for String
@@ -90,7 +95,7 @@ if (Ember.EXTEND_PROTOTYPES === true || Ember.EXTEND_PROTOTYPES.String) {
   };
 
   /**
-    See {{#crossLink "Ember.String/classify"}}{{/crossLink}}
+    See [Ember.String.classify](/api/classes/Ember.String.html#method_classify).
 
     @method classify
     @for String
@@ -98,5 +103,28 @@ if (Ember.EXTEND_PROTOTYPES === true || Ember.EXTEND_PROTOTYPES.String) {
   String.prototype.classify = function() {
     return classify(this);
   };
+
+  /**
+    See [Ember.String.capitalize](/api/classes/Ember.String.html#method_capitalize).
+
+    @method capitalize
+    @for String
+  */
+  String.prototype.capitalize = function() {
+    return capitalize(this);
+  };
+
+  if (Ember.FEATURES.isEnabled("string-humanize")) {
+    /**
+      See [Ember.String.humanize](/api/classes/Ember.String.html#method_humanize).
+
+      @method humanize
+      @for String
+    */
+    String.prototype.humanize = function() {
+      return humanize(this);
+    };
+  }
+
 }
 

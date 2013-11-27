@@ -41,13 +41,13 @@ var originalLookup = Ember.lookup, lookup;
 module("object.get()", {
 
   setup: function() {
-    object = ObservableObject.create(Ember.Observable, {
+    object = ObservableObject.createWithMixins(Ember.Observable, {
 
       normal: 'value',
       numberVal: 24,
       toggleVal: true,
 
-      computed: Ember.computed(function() { return 'value'; }).property().volatile(),
+      computed: Ember.computed(function() { return 'value'; }).volatile(),
 
       method: function() { return "value"; },
 
@@ -55,7 +55,6 @@ module("object.get()", {
 
       unknownProperty: function(key, value) {
         this.lastUnknownProperty = key ;
-        this._super(key, value);
         return "unknown" ;
       }
 
@@ -91,13 +90,13 @@ test("should call unknownProperty when value is undefined", function() {
 //
 module("Ember.get()", {
   setup: function() {
-    objectA = ObservableObject.create({
+    objectA = ObservableObject.createWithMixins({
 
       normal: 'value',
       numberVal: 24,
       toggleVal: true,
 
-      computed: Ember.computed(function() { return 'value'; }).property().volatile(),
+      computed: Ember.computed(function() { return 'value'; }).volatile(),
 
       method: function() { return "value"; },
 
@@ -105,7 +104,6 @@ module("Ember.get()", {
 
       unknownProperty: function(key, value) {
         this.lastUnknownProperty = key ;
-        this._super(key, value);
         return "unknown" ;
       }
 
@@ -158,9 +156,9 @@ test("raise if the provided object is null", function() {
 */
 
 test("raise if the provided object is undefined", function() {
-  raises(function() {
+  expectAssertion(function() {
     Ember.get(undefined, 'key');
-  });
+  }, /Cannot call get with 'key' on an undefined object/i);
 });
 
 test("should work when object is Ember (used in Ember.get)", function() {
@@ -180,8 +178,8 @@ module("Ember.get() with paths", {
 
 test("should return a property at a given path relative to the lookup", function() {
   lookup.Foo = ObservableObject.create({
-    Bar: ObservableObject.create({
-      Baz: Ember.computed(function() { return "blargh"; }).property().volatile()
+    Bar: ObservableObject.createWithMixins({
+      Baz: Ember.computed(function() { return "blargh"; }).volatile()
     })
   });
 
@@ -190,8 +188,8 @@ test("should return a property at a given path relative to the lookup", function
 
 test("should return a property at a given path relative to the passed object", function() {
   var foo = ObservableObject.create({
-    bar: ObservableObject.create({
-      baz: Ember.computed(function() { return "blargh"; }).property().volatile()
+    bar: ObservableObject.createWithMixins({
+      baz: Ember.computed(function() { return "blargh"; }).volatile()
     })
   });
 
@@ -225,7 +223,7 @@ test("should return a property at a given path relative to the passed object - J
 module("object.set()", {
 
   setup: function() {
-    object = ObservableObject.create({
+    object = ObservableObject.createWithMixins({
 
       // normal property
       normal: 'value',
@@ -237,7 +235,7 @@ module("object.set()", {
           this._computed = value ;
         }
         return this._computed ;
-      }).property().volatile(),
+      }).volatile(),
 
       // method, but not a property
       _method: "method",
@@ -254,13 +252,11 @@ module("object.set()", {
       // unknown property
       _unknown: 'unknown',
       unknownProperty: function(key) {
-        this._super(key);
         return this._unknown ;
       },
 
       setUnknownProperty: function(key, value) {
         this._unknown = value ;
-        this._super(key, value);
         return this._unknown ;
       }
     });
@@ -277,10 +273,6 @@ test("should change normal properties and return this", function() {
 test("should call computed properties passing value and return this", function() {
   var ret = object.set("computed", "changed") ;
   equal(object._computed, "changed") ;
-
-  // DISABLED: this is no longer true with accessors
-  //equal(Ember.typeOf(object.computed), 'function') ;
-
   equal(ret, object) ;
 });
 
@@ -317,7 +309,7 @@ module("Computed properties", {
   setup: function() {
     lookup = Ember.lookup = {};
 
-    object = ObservableObject.create({
+    object = ObservableObject.createWithMixins({
 
       // REGULAR
 
@@ -325,13 +317,13 @@ module("Computed properties", {
       computed: Ember.computed(function(key, value) {
         this.computedCalls.push(value);
         return 'computed';
-      }).property().volatile(),
+      }).volatile(),
 
       computedCachedCalls: [],
       computedCached: Ember.computed(function(key, value) {
         this.computedCachedCalls.push(value);
         return 'computedCached';
-      }).property(),
+      }),
 
 
       // DEPENDENT KEYS
@@ -365,6 +357,7 @@ module("Computed properties", {
       // depends on cached property which depends on another property...
       nestedIncCallCount: 0,
       nestedInc: Ember.computed(function(key, value) {
+        Ember.get(this, 'inc');
         return this.nestedIncCallCount++;
       }).property('inc'),
 
@@ -531,7 +524,7 @@ test('setting one of two computed properties that depend on a third property sho
 });
 
 test("dependent keys should be able to be specified as property paths", function() {
-  var depObj = ObservableObject.create({
+  var depObj = ObservableObject.createWithMixins({
     menu: ObservableObject.create({
       price: 5
     }),
@@ -551,7 +544,7 @@ test("dependent keys should be able to be specified as property paths", function
 test("nested dependent keys should propagate after they update", function() {
   var bindObj;
   Ember.run(function () {
-    lookup.DepObj = ObservableObject.create({
+    lookup.DepObj = ObservableObject.createWithMixins({
       restaurant: ObservableObject.create({
         menu: ObservableObject.create({
           price: 5
@@ -560,10 +553,10 @@ test("nested dependent keys should propagate after they update", function() {
 
       price: Ember.computed(function() {
         return this.get('restaurant.menu.price');
-      }).property('restaurant.menu.price').volatile()
+      }).property('restaurant.menu.price')
     });
 
-    bindObj = ObservableObject.create({
+    bindObj = ObservableObject.createWithMixins({
       priceBinding: "DepObj.price"
     });
   });
@@ -590,8 +583,8 @@ test("cacheable nested dependent keys should clear after their dependencies upda
 
   var DepObj;
 
-  Ember.run(function(){
-    lookup.DepObj = DepObj = ObservableObject.create({
+  Ember.run(function() {
+    lookup.DepObj = DepObj = ObservableObject.createWithMixins({
       restaurant: ObservableObject.create({
         menu: ObservableObject.create({
           price: 5
@@ -606,18 +599,18 @@ test("cacheable nested dependent keys should clear after their dependencies upda
 
   equal(DepObj.get('price'), 5, "precond - computed property is correct");
 
-  Ember.run(function(){
+  Ember.run(function() {
     DepObj.set('restaurant.menu.price', 10);
   });
   equal(DepObj.get('price'), 10, "cacheable computed properties are invalidated even if no run loop occurred");
 
-  Ember.run(function(){
+  Ember.run(function() {
     DepObj.set('restaurant.menu.price', 20);
   });
   equal(DepObj.get('price'), 20, "cacheable computed properties are invalidated after a second get before a run loop");
   equal(DepObj.get('price'), 20, "precond - computed properties remain correct after a run loop");
 
-  Ember.run(function(){
+  Ember.run(function() {
     DepObj.set('restaurant.menu', ObservableObject.create({
       price: 15
     }));
@@ -626,7 +619,7 @@ test("cacheable nested dependent keys should clear after their dependencies upda
 
   equal(DepObj.get('price'), 15, "cacheable computed properties are invalidated after a middle property changes");
 
-  Ember.run(function(){
+  Ember.run(function() {
     DepObj.set('restaurant.menu', ObservableObject.create({
       price: 25
     }));
@@ -644,7 +637,7 @@ test("cacheable nested dependent keys should clear after their dependencies upda
 module("Observable objects & object properties ", {
 
   setup: function() {
-    object = ObservableObject.create({
+    object = ObservableObject.createWithMixins({
 
       normal: 'value',
       abnormal: 'zeroValue',
@@ -663,25 +656,26 @@ module("Observable objects & object properties ", {
         return ret ;
       },
 
-      newObserver:function(){
+      newObserver:function() {
         this.abnormal = 'changedValueObserved';
       },
 
-      testObserver: Ember.observer(function(){
+      testObserver: Ember.observer('normal', function() {
         this.abnormal = 'removedObserver';
-      }, 'normal'),
+      }),
 
-      testArrayObserver: Ember.observer(function(){
+      testArrayObserver: Ember.observer('normalArray.[]', function() {
         this.abnormal = 'notifiedObserver';
-      }, 'normalArray.[]')
+      })
 
     });
   }
 
 });
 
-test('incrementProperty and decrementProperty',function(){
+test('incrementProperty and decrementProperty',function() {
   var newValue = object.incrementProperty('numberVal');
+
   equal(25,newValue,'numerical value incremented');
   object.numberVal = 24;
   newValue = object.decrementProperty('numberVal');
@@ -690,17 +684,58 @@ test('incrementProperty and decrementProperty',function(){
   newValue = object.incrementProperty('numberVal', 5);
   equal(30,newValue,'numerical value incremented by specified increment');
   object.numberVal = 25;
+  newValue = object.incrementProperty('numberVal', -5);
+  equal(20,newValue,'minus numerical value incremented by specified increment');
+  object.numberVal = 25;
+  newValue = object.incrementProperty('numberVal', 0);
+  equal(25,newValue,'zero numerical value incremented by specified increment');
+
+  expectAssertion(function() {
+    newValue = object.incrementProperty('numberVal', (0 - void(0))); // Increment by NaN
+  }, /Must pass a numeric value to incrementProperty/i);
+
+  expectAssertion(function() {
+    newValue = object.incrementProperty('numberVal', 'Ember'); // Increment by non-numeric String
+  }, /Must pass a numeric value to incrementProperty/i);
+
+  expectAssertion(function() {
+    newValue = object.incrementProperty('numberVal', 1/0); // Increment by Infinity
+  }, /Must pass a numeric value to incrementProperty/i);
+
+  equal(25,newValue,'Attempting to increment by non-numeric values should not increment value');
+
+  object.numberVal = 25;
   newValue = object.decrementProperty('numberVal',5);
   equal(20,newValue,'numerical value decremented by specified increment');
+  object.numberVal = 25;
+  newValue = object.decrementProperty('numberVal', -5);
+  equal(30,newValue,'minus numerical value decremented by specified increment');
+  object.numberVal = 25;
+  newValue = object.decrementProperty('numberVal', 0);
+  equal(25,newValue,'zero numerical value decremented by specified increment');
+
+  expectAssertion(function() {
+    newValue = object.decrementProperty('numberVal', (0 - void(0))); // Decrement by NaN
+  }, /Must pass a numeric value to decrementProperty/i);
+
+  expectAssertion(function() {
+    newValue = object.decrementProperty('numberVal', 'Ember'); // Decrement by non-numeric String
+  }, /Must pass a numeric value to decrementProperty/i);
+
+  expectAssertion(function() {
+    newValue = object.decrementProperty('numberVal', 1/0); // Decrement by Infinity
+  }, /Must pass a numeric value to decrementProperty/i);
+
+  equal(25,newValue,'Attempting to decrement by non-numeric values should not decrement value');
 });
 
-test('toggle function, should be boolean',function(){
+test('toggle function, should be boolean',function() {
   equal(object.toggleProperty('toggleVal',true,false),object.get('toggleVal'));
   equal(object.toggleProperty('toggleVal',true,false),object.get('toggleVal'));
   equal(object.toggleProperty('toggleVal',undefined,undefined),object.get('toggleVal'));
 });
 
-test('should notify array observer when array changes',function(){
+test('should notify array observer when array changes',function() {
   get(object, 'normalArray').replace(0,0,6);
   equal(object.abnormal, 'notifiedObserver', 'observer should be notified');
 });
@@ -727,7 +762,7 @@ module("object.addObserver()", {
         this.incrementor= this.incrementor+1;
       },
 
-      chainedObserver:function(){
+      chainedObserver:function() {
         this.normal2 = 'chainedPropertyObserved' ;
       }
 
@@ -769,7 +804,7 @@ module("object.removeObserver()", {
       removeAction: function() {
         this.normal2 = 'newDependentValue';
       },
-      removeChainedObserver:function(){
+      removeChainedObserver:function() {
         this.normal2 = 'chainedPropertyObserved' ;
       },
 
@@ -859,12 +894,12 @@ module("Bind function ", {
 
 test("should bind property with method parameter as undefined", function() {
   // creating binding
-  Ember.run(function(){
+  Ember.run(function() {
     objectA.bind("name", "Namespace.objectB.normal",undefined) ;
   });
 
   // now make a change to see if the binding triggers.
-  Ember.run(function(){
+  Ember.run(function() {
     objectB.set("normal", "changedValue") ;
   });
 

@@ -1,5 +1,11 @@
 module('Ember.String.dasherize');
 
+if (!Ember.EXTEND_PROTOTYPES && !Ember.EXTEND_PROTOTYPES.String) {
+  test("String.prototype.dasherize is not modified without EXTEND_PROTOTYPES", function() {
+    ok("undefined" === typeof String.prototype.dasherize, 'String.prototype helper disabled');
+  });
+}
+
 test("dasherize normal string", function() {
   deepEqual(Ember.String.dasherize('my favorite items'), 'my-favorite-items');
   if (Ember.EXTEND_PROTOTYPES) {
@@ -25,6 +31,13 @@ test("dasherize camelcased string", function() {
   deepEqual(Ember.String.dasherize('innerHTML'), 'inner-html');
   if (Ember.EXTEND_PROTOTYPES) {
     deepEqual('innerHTML'.dasherize(), 'inner-html');
+  }
+});
+
+test("dasherize string that is the property name of Object.prototype", function() {
+  deepEqual(Ember.String.dasherize('toString'), 'to-string');
+  if (Ember.EXTEND_PROTOTYPES) {
+    deepEqual('toString'.dasherize(), 'to-string');
   }
 });
 
