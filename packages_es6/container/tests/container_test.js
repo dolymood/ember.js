@@ -1,25 +1,8 @@
-var passedOptions;
-var Container = requireModule('container');
+import { factory,
+         o_create,
+         setProperties} from 'container/tests/container_helper';
 
-function setProperties(object, properties) {
-  for (var key in properties) {
-    if (properties.hasOwnProperty(key)) {
-      object[key] = properties[key];
-    }
-  }
-}
-
-var o_create = Object.create || (function(){
-  function F(){}
-
-  return function(o) {
-    if (arguments.length !== 1) {
-      throw new Ember.Error('Object.create implementation only accepts one parameter.');
-    }
-    F.prototype = o;
-    return new F();
-  };
-}());
+import Container from 'container';
 
 var originalModelInjections;
 
@@ -31,61 +14,6 @@ module("Container", {
     Ember.MODEL_FACTORY_INJECTIONS = originalModelInjections;
   }
 });
-
-var guids = 0;
-
-function factory() {
-  var Klass = function(options) {
-    setProperties(this, options);
-    this._guid = guids++;
-  };
-
-  Klass.prototype.constructor = Klass;
-  Klass.prototype.destroy = function() {
-    this.isDestroyed = true;
-  };
-
-  Klass.prototype.toString = function() {
-    return "<Factory:" + this._guid + ">";
-  };
-
-  Klass.create = create;
-  Klass.extend = extend;
-  Klass.reopen = extend;
-  Klass.reopenClass = reopenClass;
-
-  return Klass;
-
-  function create(options) {
-    passedOptions = options;
-    return new this.prototype.constructor(options);
-  }
-
-  function reopenClass(options) {
-    setProperties(this, options);
-  }
-
-  function extend(options) {
-    var Child = function(options) {
-      Klass.call(this, options);
-    };
-
-    var Parent = this;
-
-    Child.prototype = new Parent();
-    Child.prototype.constructor = Child;
-
-    setProperties(Child.prototype, options);
-
-    Child.create = create;
-    Child.extend = extend;
-    Child.reopen = extend;
-
-    Child.reopenClass = reopenClass;
-
-    return Child;
-  }
-}
 
 test("A registered factory returns the same instance each time", function() {
   var container = new Container();
@@ -431,9 +359,100 @@ test("The container normalizes names before resolving", function() {
   };
 
   container.register('controller:post', PostController);
-  var postController = container.lookup('wycats');
+  var postController = container.lookup('controller:normalized');
 
   ok(postController instanceof PostController, "Normalizes the name before resolving");
+});
+
+test("The container normalizes names when unregistering", function() {
+  var container = new Container();
+  var PostController = factory();
+
+  container.normalize = function(fullName) {
+    return 'controller:post';
+  };
+
+  container.register('controller:post', PostController);
+  var postController = container.lookup('controller:normalized');
+
+  ok(postController instanceof PostController, "Normalizes the name before resolving");
+
+  container.unregister('controller:post');
+  postController = container.lookup('controller:normalized');
+
+  equal(postController, undefined);
+});
+
+test("The container normalizes names when resolving", function() {
+  var container = new Container();
+  var PostController = factory();
+
+  container.normalize = function(fullName) {
+    return 'controller:post';
+  };
+
+  container.register('controller:post', PostController);
+  var type = container.resolve('controller:normalized');
+
+  equal(type === PostController, true, "Normalizes the name when resolving");
+});
+
+test("The container normalizes names when looking factory up", function() {
+  var container = new Container();
+  var PostController = factory();
+
+  container.normalize = function(fullName) {
+    return 'controller:post';
+  };
+
+  container.register('controller:post', PostController);
+  var fact = container.lookupFactory('controller:normalized');
+
+  equal(fact.toString() === PostController.extend().toString(), true, "Normalizes the name when looking factory up");
+});
+
+test("The container normalizes names when checking if the factory or instance is present", function() {
+  var container = new Container();
+  var PostController = factory();
+
+  container.normalize = function(fullName) {
+    return 'controller:post';
+  };
+
+  container.register('controller:post', PostController);
+  var isPresent = container.has('controller:normalized');
+
+  equal(isPresent, true, "Normalizes the name when checking if the factory or instance is present");
+});
+
+test("validateFullName throws an error if name is incorrect", function() {
+  var container = new Container();
+  var PostController = factory();
+
+  container.normalize = function(fullName) {
+    return 'controller:post';
+  };
+
+  container.register('controller:post', PostController);
+  throws(function() {
+    container.lookupFactory('post');
+  }, 'TypeError: Invalid Fullname, expected: `type:name` got: post');
+});
+
+test("The container normalizes names when injecting", function() {
+  var container = new Container();
+  var PostController = factory();
+  var user = { name: 'Stef' };
+
+  container.normalize = function(fullName) {
+    return 'controller:post';
+  };
+
+  container.register('controller:post', PostController);
+  container.register('user:post', user, { instantiate: false });
+  container.injection('controller:post', 'user', 'controller:normalized');
+
+  deepEqual(container.lookup('controller:post'), user, "Normalizes the name when injecting");
 });
 
 test("The container can get options that should be applied to all factories for a given type", function() {
@@ -492,3 +511,38 @@ test("cannot re-register a factory if has been looked up", function(){
 });
 
 
+test('container.has should not accidentally cause injections on that factory to be run. (Mitigate merely on observing)', function(){
+  expect(1);
+
+  var container = new Container(),
+    FirstApple = factory('first'),
+    SecondApple = factory('second');
+
+  SecondApple.extend = function(a,b,c) {
+    ok(false, 'should not extend or touch the injected model, merely to inspect existence of another');
+  };
+
+  container.register('controller:apple', FirstApple);
+  container.register('controller:second-apple', SecondApple);
+  container.injection('controller:apple', 'badApple', 'controller:second-apple');
+
+  ok(container.has('controller:apple'));
+});
+
+test('once resolved, always return the same result', function(){
+  expect(1);
+
+  var container = new Container();
+
+  container.resolver = function() {
+    return 'bar';
+  };
+
+  var Bar = container.resolve('models:bar');
+
+  container.resolver = function() {
+    return 'not bar';
+  };
+
+  equal(container.resolve('models:bar'), Bar);
+});

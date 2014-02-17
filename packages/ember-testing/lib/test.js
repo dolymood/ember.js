@@ -27,19 +27,20 @@ Ember.Test = {
     the first parameter.
 
     For example:
+
     ```javascript
-      Ember.Test.registerHelper('boot', function(app) {
-        Ember.run(app, app.advanceReadiness);
-      });
+    Ember.Test.registerHelper('boot', function(app) {
+      Ember.run(app, app.advanceReadiness);
+    });
     ```
 
     This helper can later be called without arguments because it will be
     called with `app` as the first parameter.
 
     ```javascript
-      App = Ember.Application.create();
-      App.injectTestHelpers();
-      boot();
+    App = Ember.Application.create();
+    App.injectTestHelpers();
+    boot();
     ```
 
     @public
@@ -63,10 +64,11 @@ Ember.Test = {
     the first parameter.
 
     For example:
+
     ```javascript
-      Ember.Test.registerAsyncHelper('boot', function(app) {
-        Ember.run(app, app.advanceReadiness);
-      });
+    Ember.Test.registerAsyncHelper('boot', function(app) {
+      Ember.run(app, app.advanceReadiness);
+    });
     ```
 
     The advantage of an async helper is that it will not run
@@ -75,16 +77,17 @@ Ember.Test = {
 
 
     For example:
-    ```javascript
-      Ember.Test.registerAsyncHelper('deletePost', function(app, postId) {
-        click('.delete-' + postId);
-      });
 
-      // ... in your test
-      visit('/post/2');
-      deletePost(2);
-      visit('/post/3');
-      deletePost(3);
+    ```javascript
+    Ember.Test.registerAsyncHelper('deletePost', function(app, postId) {
+      click('.delete-' + postId);
+    });
+
+    // ... in your test
+    visit('/post/2');
+    deletePost(2);
+    visit('/post/3');
+    deletePost(3);
     ```
 
     @public
@@ -103,7 +106,8 @@ Ember.Test = {
     Remove a previously added helper method.
 
     Example:
-    ```
+
+    ```javascript
     Ember.Test.unregisterHelper('wait');
     ```
 
@@ -123,7 +127,8 @@ Ember.Test = {
     The callback will receive the current application as an argument.
 
     Example:
-    ```
+
+    ```javascript
     Ember.Test.onInjectHelpers(function() {
       Ember.$(document).ajaxStart(function() {
         Test.pendingAjaxRequests++;
@@ -165,7 +170,8 @@ Ember.Test = {
    You can manually set it before calling `App.setupForTesting()`.
 
    Example:
-   ```
+
+   ```javascript
    Ember.Test.adapter = MyCustomAdapter.create()
    ```
 
@@ -194,25 +200,26 @@ Ember.Test = {
   },
 
   /**
-   @public
-
      This allows ember-testing to play nicely with other asynchronous
      events, such as an application that is waiting for a CSS3
      transition or an IndexDB transaction.
 
      For example:
+
      ```javascript
      Ember.Test.registerWaiter(function() {
-     return myPendingTransactions() == 0;
+       return myPendingTransactions() == 0;
      });
      ```
      The `context` argument allows you to optionally specify the `this`
      with which your callback will be invoked.
 
      For example:
+
      ```javascript
      Ember.Test.registerWaiter(MyDB, MyDB.hasPendingTransactions);
      ```
+
      @public
      @method registerWaiter
      @param {Object} context (optional)
@@ -340,6 +347,7 @@ Ember.Application.reopen({
    with your testing framework).
 
    Example:
+
   ```
   App.setupForTesting();
   ```
@@ -347,22 +355,13 @@ Ember.Application.reopen({
     @method setupForTesting
   */
   setupForTesting: function() {
-    Ember.testing = true;
+    Ember.setupForTesting();
 
-    if (Ember.FEATURES.isEnabled('ember-testing-lazy-routing')){
-      this.testing = true;
-    } else {
-      this.deferReadiness();
-    }
+    this.testing = true;
 
     this.Router.reopen({
       location: 'none'
     });
-
-    // if adapter is not manually set default to QUnit
-    if (!Ember.Test.adapter) {
-       Ember.Test.adapter = Ember.Test.QUnitAdapter.create();
-    }
 
     if (Ember.FEATURES.isEnabled('ember-testing-simple-setup')){
       this.testingSetup = true;
@@ -409,9 +408,6 @@ Ember.Application.reopen({
     for(var i = 0, l = injectHelpersCallbacks.length; i < l; i++) {
       injectHelpersCallbacks[i](this);
     }
-
-    Ember.RSVP.on('error', onerror);
-    Ember.RSVP.off('error', Ember.RSVP.onerrorDefault);
   },
 
   /**
@@ -419,7 +415,8 @@ Ember.Application.reopen({
     that were overridden by the helpers.
 
     Example:
-    ```
+
+    ```javascript
     App.removeTestHelpers();
     ```
 
@@ -432,10 +429,7 @@ Ember.Application.reopen({
       delete this.testHelpers[name];
       delete this.originalMethods[name];
     }
-    Ember.RSVP.off('error', onerror);
-    Ember.RSVP.on('error', Ember.RSVP.onerrorDefault);
   }
-
 });
 
 // This method is no longer needed
@@ -484,7 +478,7 @@ function isolate(fn, val) {
   // Reset lastPromise for nested helpers
   Ember.Test.lastPromise = null;
 
-  value = fn.call(null, val);
+  value = fn(val);
 
   lastPromise = Ember.Test.lastPromise;
 
@@ -501,8 +495,4 @@ function isolate(fn, val) {
     });
     return lastPromise;
   }
-}
-
-function onerror(event) {
-  Ember.Test.adapter.exception(event.detail);
 }

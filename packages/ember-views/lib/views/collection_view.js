@@ -68,7 +68,7 @@ var get = Ember.get, set = Ember.set, fmt = Ember.String.fmt;
   Given an empty `<body>` and the following code:
 
   ```javascript
-  anUndorderedListView = Ember.CollectionView.create({
+  anUnorderedListView = Ember.CollectionView.create({
     tagName: 'ul',
     content: ['A','B','C'],
     itemViewClass: Ember.View.extend({
@@ -76,7 +76,7 @@ var get = Ember.get, set = Ember.set, fmt = Ember.String.fmt;
     })
   });
 
-  anUndorderedListView.appendTo('body');
+  anUnorderedListView.appendTo('body');
   ```
 
   Will result in the following HTML structure
@@ -156,7 +156,7 @@ var get = Ember.get, set = Ember.set, fmt = Ember.String.fmt;
   @extends Ember.ContainerView
   @since Ember 0.9
 */
-Ember.CollectionView = Ember.ContainerView.extend(/** @scope Ember.CollectionView.prototype */ {
+Ember.CollectionView = Ember.ContainerView.extend({
 
   /**
     A list of items to be displayed by the `Ember.CollectionView`.
@@ -168,12 +168,11 @@ Ember.CollectionView = Ember.ContainerView.extend(/** @scope Ember.CollectionVie
   content: null,
 
   /**
-    @private
-
     This provides metadata about what kind of empty view class this
     collection would like if it is being instantiated from another
     system (like Handlebars)
 
+    @private
     @property emptyViewClass
   */
   emptyViewClass: Ember.View,
@@ -206,11 +205,10 @@ Ember.CollectionView = Ember.ContainerView.extend(/** @scope Ember.CollectionVie
   },
 
   /**
-    @private
-
     Invoked when the content property is about to change. Notifies observers that the
     entire array content will change.
 
+    @private
     @method _contentWillChange
   */
   _contentWillChange: Ember.beforeObserver('content', function() {
@@ -222,13 +220,12 @@ Ember.CollectionView = Ember.ContainerView.extend(/** @scope Ember.CollectionVie
   }),
 
   /**
-    @private
-
     Check to make sure that the content has changed, and if so,
     update the children directly. This is always scheduled
     asynchronously, to allow the element to be created before
     bindings have synchronized and vice versa.
 
+    @private
     @method _contentDidChange
   */
   _contentDidChange: Ember.observer('content', function() {
@@ -244,10 +241,9 @@ Ember.CollectionView = Ember.ContainerView.extend(/** @scope Ember.CollectionVie
   }),
 
   /**
-    @private
-
     Ensure that the content implements Ember.Array
 
+    @private
     @method _assertArrayLike
   */
   _assertArrayLike: function(content) {
@@ -342,7 +338,9 @@ Ember.CollectionView = Ember.ContainerView.extend(/** @scope Ember.CollectionVie
         itemViewClass = get(itemViewClass) || itemViewClass;
       }
 
-      Ember.assert(fmt("itemViewClass must be a subclass of Ember.View, not %@", [itemViewClass]), 'string' === typeof itemViewClass || Ember.View.detect(itemViewClass));
+      Ember.assert(fmt("itemViewClass must be a subclass of Ember.View, not %@",
+                       [itemViewClass]),
+                       'string' === typeof itemViewClass || Ember.View.detect(itemViewClass));
 
       for (idx = start; idx < start+added; idx++) {
         item = content.objectAt(idx);

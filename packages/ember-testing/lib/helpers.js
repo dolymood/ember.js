@@ -19,7 +19,10 @@ Test.onInjectHelpers(function() {
   });
 
   Ember.$(document).ajaxStop(function() {
-    Ember.assert("An ajaxStop event which would cause the number of pending AJAX requests to be negative has been triggered. This is most likely caused by AJAX events that were started before calling `injectTestHelpers()`.", Test.pendingAjaxRequests !== 0);
+    Ember.assert("An ajaxStop event which would cause the number of pending AJAX " +
+                 "requests to be negative has been triggered. This is most likely " +
+                 "caused by AJAX events that were started before calling " +
+                 "`injectTestHelpers()`.", Test.pendingAjaxRequests !== 0);
     Test.pendingAjaxRequests--;
   });
 });
@@ -43,12 +46,17 @@ function currentURL(app){
 }
 
 function visit(app, url) {
-  if (Ember.FEATURES.isEnabled('ember-testing-lazy-routing')){
+  var router = app.__container__.lookup('router:main');
+  router.location.setURL(url);
+
+  if (app._readinessDeferrals > 0) {
+    router['initialURL'] = url;
     Ember.run(app, 'advanceReadiness');
+    delete router['initialURL'];
+  } else {
+    Ember.run(app, app.handleURL, url);
   }
 
-  app.__container__.lookup('router:main').location.setURL(url);
-  Ember.run(app, app.handleURL, url);
   return wait(app);
 }
 
@@ -78,13 +86,19 @@ function click(app, selector, context) {
   return wait(app);
 }
 
-function triggerEvent(app, selector, context, event){
-  if (typeof method === 'undefined') {
-    event = context;
+function triggerEvent(app, selector, context, type, options){
+  if (arguments.length === 3) {
+    type = context;
     context = null;
   }
 
+  if (typeof options === 'undefined') {
+    options = {};
+  }
+
   var $el = findWithAssert(app, selector, context);
+
+  var event = Ember.$.Event(type, options);
 
   Ember.run($el, 'trigger', event);
 
@@ -92,16 +106,13 @@ function triggerEvent(app, selector, context, event){
 }
 
 function keyEvent(app, selector, context, type, keyCode) {
-  var $el;
   if (typeof keyCode === 'undefined') {
     keyCode = type;
     type = context;
     context = null;
   }
-  $el = findWithAssert(app, selector, context);
-  var event = Ember.$.Event(type, { keyCode: keyCode });
-  Ember.run($el, 'trigger', event);
-  return wait(app);
+
+  return triggerEvent(app, selector, context, type, { keyCode: keyCode });
 }
 
 function fillIn(app, selector, context, text) {
@@ -147,7 +158,7 @@ function wait(app, value) {
     // Every 10ms, poll for the async thing to have finished
     var watcher = setInterval(function() {
       // 1. If the router is loading, keep polling
-      var routerIsLoading = app.__container__.lookup('router:main').router.isLoading;
+      var routerIsLoading = !!app.__container__.lookup('router:main').router.activeTransition;
       if (routerIsLoading) { return; }
 
       // 2. If there are pending Ajax requests, keep polling
@@ -155,13 +166,11 @@ function wait(app, value) {
 
       // 3. If there are scheduled timers or we are inside of a run loop, keep polling
       if (Ember.run.hasScheduledTimers() || Ember.run.currentRunLoop) { return; }
-      if (Ember.FEATURES.isEnabled("ember-testing-wait-hooks")) {
-        if (Test.waiters && Test.waiters.any(function(waiter) {
-          var context = waiter[0];
-          var callback = waiter[1];
-          return !callback.apply(context);
-        })) { return; }
-      }
+      if (Test.waiters && Test.waiters.any(function(waiter) {
+        var context = waiter[0];
+        var callback = waiter[1];
+        return !callback.call(context);
+      })) { return; }
       // Stop polling
       clearInterval(watcher);
 
@@ -185,7 +194,7 @@ function wait(app, value) {
 *
 * Example:
 *
-* ```
+* ```javascript
 * visit('posts/index').then(function() {
 *   // assert something
 * });
@@ -203,9 +212,9 @@ asyncHelper('visit', visit);
 *
 * Example:
 *
-* ```
+* ```javascript
 * click('.some-jQuery-selector').then(function() {
-*  // assert something
+*   // assert something
 * });
 * ```
 *
@@ -220,7 +229,7 @@ asyncHelper('click', click);
 *
 * Example:
 *
-* ```
+* ```javascript
 * keyEvent('.some-jQuery-selector', 'keypress', 13).then(function() {
 *  // assert something
 * });
@@ -228,8 +237,8 @@ asyncHelper('click', click);
 *
 * @method keyEvent
 * @param {String} selector jQuery selector for finding element on the DOM
-* @param {String} the type of key event, e.g. `keypress`, `keydown`, `keyup`
-* @param {Number} the keyCode of the simulated key event
+* @param {String} type the type of key event, e.g. `keypress`, `keydown`, `keyup`
+* @param {Number} keyCode the keyCode of the simulated key event
 * @return {RSVP.Promise}
 */
 asyncHelper('keyEvent', keyEvent);
@@ -239,7 +248,7 @@ asyncHelper('keyEvent', keyEvent);
 *
 * Example:
 *
-* ```
+* ```javascript
 * fillIn('#email', 'you@example.com').then(function() {
 *   // assert something
 * });
@@ -259,8 +268,8 @@ asyncHelper('fillIn', fillIn);
 *
 * Example:
 *
-* ```
-* var $el = find('.my-selector);
+* ```javascript
+* var $el = find('.my-selector');
 * ```
 *
 * @method find
@@ -270,12 +279,11 @@ asyncHelper('fillIn', fillIn);
 helper('find', find);
 
 /**
-*
-* Like `find`, but throws an error if the element selector returns no results
+* Like `find`, but throws an error if the element selector returns no results.
 *
 * Example:
 *
-* ```
+* ```javascript
 * var $el = findWithAssert('.doesnt-exist'); // throws error
 * ```
 *
@@ -296,7 +304,7 @@ helper('findWithAssert', findWithAssert);
 
   Example:
 
-  ```
+  ```javascript
   Ember.Test.registerAsyncHelper('loginUser', function(app, username, password) {
     visit('secured/path/here')
     .fillIn('#username', username)
@@ -309,7 +317,6 @@ helper('findWithAssert', findWithAssert);
   @method wait
   @param {Object} value The value to be returned.
   @return {RSVP.Promise}
-  ```
 */
 asyncHelper('wait', wait);
 asyncHelper('andThen', andThen);
@@ -321,13 +328,12 @@ if (Ember.FEATURES.isEnabled('ember-testing-routing-helpers')){
 
     Example:
 
-    ```
+    ```javascript
     function validateRouteName(){
       equal(currentRouteName(), 'some.path', "correct route was transitioned into.");
     }
 
     visit('/some/path').then(validateRouteName)
-
     ```
 
     @method currentRouteName
@@ -340,13 +346,12 @@ if (Ember.FEATURES.isEnabled('ember-testing-routing-helpers')){
 
     Example:
 
-    ```
+    ```javascript
     function validateURL(){
       equal(currentPath(), 'some.path.index', "correct path was transitioned into.");
     }
 
     click('#some-link-id').then(validateURL);
-
     ```
 
     @method currentPath
@@ -359,13 +364,12 @@ if (Ember.FEATURES.isEnabled('ember-testing-routing-helpers')){
 
     Example:
 
-    ```
+    ```javascript
     function validateURL(){
       equal(currentURL(), '/some/path', "correct URL was transitioned into.");
     }
 
     click('#some-link-id').then(validateURL);
-
     ```
 
     @method currentURL
@@ -384,9 +388,16 @@ if (Ember.FEATURES.isEnabled('ember-testing-triggerEvent-helper')) {
     triggerEvent('#some-elem-id', 'blur');
     ```
 
+    This is actually used internally by the `keyEvent` helper like so:
+
+    ```javascript
+    triggerEvent('#some-elem-id', 'keypress', { keyCode: 13 });
+    ```
+
    @method triggerEvent
    @param {String} selector jQuery selector for finding element on the DOM
-   @param {String} event The event to be triggered.
+   @param {String} type The event type to be triggered.
+   @param {String} options The options to be passed to jQuery.Event.
    @return {RSVP.Promise}
   */
   asyncHelper('triggerEvent', triggerEvent);

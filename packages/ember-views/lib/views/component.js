@@ -1,4 +1,5 @@
 require("ember-views/views/view");
+require("ember-views/mixins/component_template_deprecation");
 
 var get = Ember.get, set = Ember.set, isNone = Ember.isNone,
     a_slice = Array.prototype.slice;
@@ -15,7 +16,7 @@ var get = Ember.get, set = Ember.set, isNone = Ember.isNone,
   to the view object and actions are targeted at
   the view object. There is no access to the
   surrounding context or outer controller; all
-  contextual information is passed in.
+  contextual information must be passed in.
 
   The easiest way to create an `Ember.Component` is via
   a template. If you name a template
@@ -23,30 +24,34 @@ var get = Ember.get, set = Ember.set, isNone = Ember.isNone,
   `{{my-foo}}` in other templates, which will make
   an instance of the isolated component.
 
-  ```html
+  ```handlebars
   {{app-profile person=currentUser}}
   ```
 
-  ```html
+  ```handlebars
   <!-- app-profile template -->
   <h1>{{person.title}}</h1>
   <img {{bind-attr src=person.avatar}}>
   <p class='signature'>{{person.signature}}</p>
   ```
 
-  You can also use `yield` inside a template to
-  include the **contents** of the custom tag:
+  You can use `yield` inside a template to
+  include the **contents** of any block attached to
+  the component. The block will be executed in the
+  context of the surrounding context or outer controller:
 
-  ```html
+  ```handlebars
   {{#app-profile person=currentUser}}
     <p>Admin mode</p>
+    {{! Executed in the controller's context. }}
   {{/app-profile}}
   ```
 
-  ```html
+  ```handlebars
   <!-- app-profile template -->
   <h1>{{person.title}}</h1>
-  {{yield}} <!-- block contents -->
+  {{! Executed in the components context. }}
+  {{yield}} {{! block contents }}
   ```
 
   If you want to customize the component, in order to
@@ -70,7 +75,7 @@ var get = Ember.get, set = Ember.set, isNone = Ember.isNone,
 
   And then use it in the component's template:
 
-  ```html
+  ```handlebars
   <!-- app-profile template -->
 
   <h1>{{person.title}}</h1>
@@ -90,17 +95,55 @@ var get = Ember.get, set = Ember.set, isNone = Ember.isNone,
   @namespace Ember
   @extends Ember.View
 */
-Ember.Component = Ember.View.extend(Ember.TargetActionSupport, {
+Ember.Component = Ember.View.extend(Ember.TargetActionSupport, Ember.ComponentTemplateDeprecation, {
   init: function() {
     this._super();
     set(this, 'context', this);
     set(this, 'controller', this);
   },
 
-  defaultLayout: function(options){
-    options.data = {view: options._context};
-    Ember.Handlebars.helpers['yield'].apply(this, [options]);
+  defaultLayout: function(context, options){
+    Ember.Handlebars.helpers['yield'].call(context, options);
   },
+
+  /**
+  A components template property is set by passing a block
+  during its invocation. It is executed within the parent context.
+
+  Example:
+
+  ```handlebars
+  {{#my-component}}
+    // something that is run in the context
+    // of the parent context
+  {{/my-component}}
+  ```
+
+  Specifying a template directly to a component is deprecated without
+  also specifying the layout property.
+
+  @deprecated
+  @property template
+  */
+  template: Ember.computed(function(key, value) {
+    if (value !== undefined) { return value; }
+
+    var templateName = get(this, 'templateName'),
+        template = this.templateForName(templateName, 'template');
+
+    Ember.assert("You specified the templateName " + templateName + " for " + this + ", but it did not exist.", !templateName || template);
+
+    return template || get(this, 'defaultTemplate');
+  }).property('templateName'),
+
+  /**
+  Specifying a components `templateName` is deprecated without also
+  providing the `layout` or `layoutName` properties.
+
+  @deprecated
+  @property templateName
+  */
+  templateName: null,
 
   // during render, isolate keywords
   cloneKeywords: function() {
@@ -156,9 +199,9 @@ Ember.Component = Ember.View.extend(Ember.TargetActionSupport, {
     App.PlayButtonComponent = Ember.Component.extend({
       click: function(){
         if (this.get('isPlaying')) {
-          this.triggerAction('play');
+          this.sendAction('play');
         } else {
-          this.triggerAction('stop');
+          this.sendAction('stop');
         }
       }
     });
@@ -230,10 +273,15 @@ Ember.Component = Ember.View.extend(Ember.TargetActionSupport, {
     // Send the default action
     if (action === undefined) {
       actionName = get(this, 'action');
-      Ember.assert("The default action was triggered on the component " + this.toString() + ", but the action name (" + actionName + ") was not a string.", isNone(actionName) || typeof actionName === 'string');
+      Ember.assert("The default action was triggered on the component " + this.toString() +
+                   ", but the action name (" + actionName + ") was not a string.",
+                   isNone(actionName) || typeof actionName === 'string');
     } else {
       actionName = get(this, action);
-      Ember.assert("The " + action + " action was triggered on the component " + this.toString() + ", but the action name (" + actionName + ") was not a string.", isNone(actionName) || typeof actionName === 'string');
+      Ember.assert("The " + action + " action was triggered on the component " +
+                   this.toString() + ", but the action name (" + actionName +
+                   ") was not a string.",
+                   isNone(actionName) || typeof actionName === 'string');
     }
 
     // If no action name for that action could be found, just abort.

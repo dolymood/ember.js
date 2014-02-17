@@ -1,4 +1,4 @@
-define("backburner/queue",
+define("backburner/queue", 
   ["exports"],
   function(__exports__) {
     "use strict";
@@ -105,11 +105,10 @@ define("backburner/queue",
       }
     };
 
-
     __exports__.Queue = Queue;
   });
 
-define("backburner/deferred_action_queues",
+define("backburner/deferred_action_queues", 
   ["backburner/queue","exports"],
   function(__dependency1__, __exports__) {
     "use strict";
@@ -208,11 +207,10 @@ define("backburner/deferred_action_queues",
       return -1;
     }
 
-
     __exports__.DeferredActionQueues = DeferredActionQueues;
   });
 
-define("backburner",
+define("backburner", 
   ["backburner/deferred_action_queues","exports"],
   function(__dependency1__, __exports__) {
     "use strict";
@@ -321,7 +319,7 @@ define("backburner",
           method = target[method];
         }
 
-        var stack = this.DEBUG ? new Error().stack : undefined,
+        var stack = this.DEBUG ? new Error() : undefined,
             args = arguments.length > 3 ? slice.call(arguments, 3) : undefined;
         if (!this.currentInstance) { createAutorun(this); }
         return this.currentInstance.schedule(queueName, target, method, args, false, stack);
@@ -337,7 +335,7 @@ define("backburner",
           method = target[method];
         }
 
-        var stack = this.DEBUG ? new Error().stack : undefined,
+        var stack = this.DEBUG ? new Error() : undefined,
             args = arguments.length > 3 ? slice.call(arguments, 3) : undefined;
         if (!this.currentInstance) { createAutorun(this); }
         return this.currentInstance.schedule(queueName, target, method, args, true, stack);
@@ -413,34 +411,44 @@ define("backburner",
         return fn;
       },
 
-      throttle: function(target, method /* , args, wait */) {
+      throttle: function(target, method /* , args, wait, [immediate] */) {
         var self = this,
             args = arguments,
-            wait = parseInt(pop.call(args), 10),
-            throttler;
+            immediate = pop.call(args),
+            wait,
+            throttler,
+            index,
+            timer;
 
-        for (var i = 0, l = throttlers.length; i < l; i++) {
-          throttler = throttlers[i];
-          if (throttler[0] === target && throttler[1] === method) { return; } // do nothing
+        if (typeof immediate === "number" || typeof immediate === "string") {
+          wait = immediate;
+          immediate = true;
+        } else {
+          wait = pop.call(args);
         }
 
-        var timer = global.setTimeout(function() {
-          self.run.apply(self, args);
+        wait = parseInt(wait, 10);
 
-          // remove throttler
-          var index = -1;
-          for (var i = 0, l = throttlers.length; i < l; i++) {
-            throttler = throttlers[i];
-            if (throttler[0] === target && throttler[1] === method) {
-              index = i;
-              break;
-            }
+        index = findThrottler(target, method);
+        if (index > -1) { return throttlers[index]; } // throttled
+
+        timer = global.setTimeout(function() {
+          if (!immediate) {
+            self.run.apply(self, args);
           }
-
+          var index = findThrottler(target, method);
           if (index > -1) { throttlers.splice(index, 1); }
         }, wait);
 
-        throttlers.push([target, method, timer]);
+        if (immediate) {
+          self.run.apply(self, args);
+        }
+
+        throttler = [target, method, timer];
+
+        throttlers.push(throttler);
+
+        return throttler;
       },
 
       debounce: function(target, method /* , args, wait, [immediate] */) {
@@ -449,7 +457,8 @@ define("backburner",
             immediate = pop.call(args),
             wait,
             index,
-            debouncee;
+            debouncee,
+            timer;
 
         if (typeof immediate === "number" || typeof immediate === "string") {
           wait = immediate;
@@ -462,18 +471,18 @@ define("backburner",
         // Remove debouncee
         index = findDebouncee(target, method);
 
-        if (index !== -1) {
+        if (index > -1) {
           debouncee = debouncees[index];
           debouncees.splice(index, 1);
           clearTimeout(debouncee[2]);
         }
 
-        var timer = global.setTimeout(function() {
+        timer = global.setTimeout(function() {
           if (!immediate) {
             self.run.apply(self, args);
           }
-          index = findDebouncee(target, method);
-          if (index) {
+          var index = findDebouncee(target, method);
+          if (index > -1) {
             debouncees.splice(index, 1);
           }
         }, wait);
@@ -482,7 +491,11 @@ define("backburner",
           self.run.apply(self, args);
         }
 
-        debouncees.push([target, method, timer]);
+        debouncee = [target, method, timer];
+
+        debouncees.push(debouncee);
+
+        return debouncee;
       },
 
       cancelTimers: function() {
@@ -515,19 +528,47 @@ define("backburner",
       },
 
       cancel: function(timer) {
-        if (timer && typeof timer === 'object' && timer.queue && timer.method) { // we're cancelling a deferOnce
+        var timerType = typeof timer;
+
+        if (timer && timerType === 'object' && timer.queue && timer.method) { // we're cancelling a deferOnce
           return timer.queue.cancel(timer);
-        } else if (typeof timer === 'function') { // we're cancelling a setTimeout
+        } else if (timerType === 'function') { // we're cancelling a setTimeout
           for (var i = 0, l = timers.length; i < l; i += 2) {
             if (timers[i + 1] === timer) {
               timers.splice(i, 2); // remove the two elements
               return true;
             }
           }
+        } else if (Object.prototype.toString.call(timer) === "[object Array]"){ // we're cancelling a throttle or debounce
+          return this._cancelItem(findThrottler, throttlers, timer) ||
+                   this._cancelItem(findDebouncee, debouncees, timer);
         } else {
           return; // timer was null or not a timer
         }
+      },
+
+      _cancelItem: function(findMethod, array, timer){
+        var item,
+            index;
+
+        if (timer.length < 3) { return false; }
+
+        index = findMethod(timer[0], timer[1]);
+
+        if(index > -1) {
+
+          item = array[index];
+
+          if(item[2] === timer[2]){
+            array.splice(index, 1);
+            clearTimeout(timer[2]);
+            return true;
+          }
+        }
+
+        return false;
       }
+
     };
 
     Backburner.prototype.schedule = Backburner.prototype.defer;
@@ -594,6 +635,20 @@ define("backburner",
       return index;
     }
 
+    function findThrottler(target, method) {
+      var throttler,
+          index = -1;
+
+      for (var i = 0, l = throttlers.length; i < l; i++) {
+        throttler = throttlers[i];
+        if (throttler[0] === target && throttler[1] === method) {
+          index = i;
+          break;
+        }
+      }
+
+      return index;
+    }
 
     __exports__.Backburner = Backburner;
   });

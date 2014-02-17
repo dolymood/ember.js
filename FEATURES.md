@@ -5,49 +5,13 @@ for a detailed explanation.
 
 ## Feature Flags
 
-* `reduceComputed-non-array-dependencies`
+* `string-parameterize`
 
-  `ReduceComputedProperty`s may have non-array dependent keys.  When a non-array
-  dependent key changes, the entire property is invalidated.
+  Transforms a string so that it may be used as part of a 'pretty' / SEO friendly URL.
+  (E.g. `'100 ways Ember.js is better than Angular.'.parameterize(); // '100-ways-emberjs-is-better-than-angular'`)
 
-  Array dependent keys may be specified with either one-at-a-time semantics or
-  total invalidation semantics.  Property names like `'dependentArray'` use
-  one-at-a-time semantics; property names like `'dependentArray.[]'` use total
-  invalidation semantics.
+  Added in [#3953](https://github.com/emberjs/ember.js/pull/3953).
 
-  This can be useful for example, for filtering.  The items to be filtered
-  should use one-a-time semantics, but the properties to filter by should use
-  total invalidation semantics.
-
-  Added in [#3614](https://github.com/emberjs/ember.js/pull/3614).
-
-* `query-params`
-
-  Add query params support to the ember router. You can now define which query
-  params your routes respond to, use them in your route hooks to affect model
-  loading or controller state, and transition query parameters with the link-to
-  helper and the transitionTo method.
-
-  Added in [#3182](https://github.com/emberjs/ember.js/pull/3182).
-* `propertyBraceExpansion`
-
-  Adds support for brace-expansion in dependent keys, observer, and watch properties.
-  (E.g. `Em.computed.filter('list.@each.{propA,propB}', filterFn)` which will observe both
-  `propA` and `propB`).
-
-  Added in [#3538](https://github.com/emberjs/ember.js/pull/3538).
-* `string-humanize`
-
-  Replaces underscores with spaces, and capitializes first character of string.
-  Also strips `_id` suffixes. (E.g. `'first_name'.humanize() // 'First name'`)
-
-  Added in [#3224](https://github.com/emberjs/ember.js/pull/3224)
-* `ember-testing-wait-hooks`
-
-  Allows registration of additional functions that the `wait` testing helper
-  will call to determine if it's ready to continue.
-
-  Added in [#3433](https://github.com/emberjs/ember.js/pull/3433)
 * `ember-routing-named-substates`
 
   Add named substates; e.g. when resolving a `loading` or `error`
@@ -60,16 +24,6 @@ for a detailed explanation.
   `ApplicationRoute`.
 
   Added in [#3655](https://github.com/emberjs/ember.js/pull/3655).
-
-* `ember-testing-lazy-routing`
-
-  Uses an initializer to defer readiness while testing. Readiness is advanced upon the first
-  call to `visit`.
-
-  NOTE: This causes `App.reset()` to behave consistently with the way an app works after calling
-  `setupForTesting` (i.e. in a deferred state of readiness).
-
-  Added in [#3695](https://github.com/emberjs/ember.js/pull/3695).
 
 * `ember-handlebars-caps-lookup`
   Forces Handlebars values starting with capital letters, like `{{CONSTANT}}`,
@@ -110,3 +64,85 @@ for a detailed explanation.
   element.
 
   Added in [#3792](https://github.com/emberjs/ember.js/pull/3792).
+  Updated in [#4177](https://github.com/emberjs/ember.js/pull/4177).
+
+* `computed-read-only`
+
+  Enables `Ember.computed.readOnly` which is the shortHand for
+  Ember.computed.oneWay('foo').readOnly().
+
+  Added in [#3879](https://github.com/emberjs/ember.js/pull/3879)
+
+* `composable-computed-properties`
+
+  This feature allows you to combine (compose) different computed
+  properties together. So it gives you a really nice "functional
+  programming" like syntax to deal with complex expressions.
+
+  Added in [#3696](https://github.com/emberjs/ember.js/pull/3696).
+
+* `query-params-new`
+
+  Add query params support to the ember router. This is a rewrite of a
+  previous attempt at an API for query params. You can define query
+  param properties on route-driven controllers with the `queryParams`
+  property, and any changes to those properties will cause the URL
+  to update, and in the other direction, any URL changes to the query
+  params will cause those controller properties to update.
+
+  Added in [#4008](https://github.com/emberjs/ember.js/pull/4008).
+
+* `ember-metal-is-blank`
+
+  Adds `Ember.isBlank` method which returns true for an empty value or
+  a whitespace string.
+
+  Added in [#4049](https://github.com/emberjs/ember.js/pull/4049).  
+
+* `ember-eager-url-update`
+
+  Invoking (clicking) `link-to` tags will immediately update the URL
+  instead of waiting for the transition to run to completion, unless
+  the transition was aborted/redirected within the same run loop.
+
+  Added in [#4122](https://github.com/emberjs/ember.js/pull/4122).
+
+* `ember-routing-auto-location`
+
+  Adds `auto` as a `location` option for the app's `Router`.
+
+  ```javascript
+  App.Router.reopen({
+    location: 'auto'
+  });
+  ```
+
+  When used, Ember will select the best location option based off browser
+  support with the priority order: history, hash, none.
+
+  Clean pushState paths accessed by hashchange-only browsers will be redirected
+  to the hash-equivalent and vice versa so future transitions look consistent.
+
+  Added in [#3725](https://github.com/emberjs/ember.js/pull/3725).
+
+* `ember-routing-bound-action-name`
+
+  Enables using a bound property lookup to determine the action name to
+  be fired.
+
+  Added in [#3936](https://github.com/emberjs/ember.js/pull/3936)
+
+* `ember-runtime-test-friendly-promises`
+  Ember.RSVP.Promise's are now ember testing aware
+
+  - they no longer cause autorun assertions
+  - if a test adapter is provided, they still automatically tell the
+    underlying test framework to start/stop between async steps.
+
+  Added in [#4176](https://github.com/emberjs/ember.js/pull/4176)
+  
+* `ember-routing-inherits-parent-model`
+
+  Ember routes and leaf resources (without nested routes) will inherit the parent route's model.
+  
+  Added in [#4246](https://github.com/emberjs/ember.js/pull/4246)

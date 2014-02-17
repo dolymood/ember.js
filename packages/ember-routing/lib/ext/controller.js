@@ -3,7 +3,10 @@
 @submodule ember-routing
 */
 
-var get = Ember.get, set = Ember.set;
+var get = Ember.get, set = Ember.set,
+    map = Ember.EnumerableUtils.map;
+
+var queuedQueryParamChanges = {};
 
 Ember.ControllerMixin.reopen({
   /**
@@ -11,8 +14,8 @@ Ember.ControllerMixin.reopen({
     be either a single route or route path:
 
     ```javascript
-      aController.transitionToRoute('blogPosts');
-      aController.transitionToRoute('blogPosts.recentEntries');
+    aController.transitionToRoute('blogPosts');
+    aController.transitionToRoute('blogPosts.recentEntries');
     ```
 
     Optionally supply a model for the route in question. The model
@@ -20,19 +23,18 @@ Ember.ControllerMixin.reopen({
     the route:
 
     ```javascript
-      aController.transitionToRoute('blogPost', aPost);
+    aController.transitionToRoute('blogPost', aPost);
     ```
 
     Multiple models will be applied last to first recursively up the
     resource tree.
 
     ```javascript
+    this.resource('blogPost', {path:':blogPostId'}, function(){
+      this.resource('blogComment', {path: ':blogCommentId'});
+    });
 
-      this.resource('blogPost', {path:':blogPostId'}, function(){
-        this.resource('blogComment', {path: ':blogCommentId'});
-      });
-      
-      aController.transitionToRoute('blogComment', aPost, aComment);
+    aController.transitionToRoute('blogComment', aPost, aComment);
     ```
 
     See also 'replaceRoute'.
@@ -62,12 +64,12 @@ Ember.ControllerMixin.reopen({
 
   /**
     Transition into another route while replacing the current URL, if possible.
-    This will replace the current history entry instead of adding a new one. 
+    This will replace the current history entry instead of adding a new one.
     Beside that, it is identical to `transitionToRoute` in all other respects.
 
     ```javascript
-      aController.replaceRoute('blogPosts');
-      aController.replaceRoute('blogPosts.recentEntries');
+    aController.replaceRoute('blogPosts');
+    aController.replaceRoute('blogPosts.recentEntries');
     ```
 
     Optionally supply a model for the route in question. The model
@@ -75,19 +77,18 @@ Ember.ControllerMixin.reopen({
     the route:
 
     ```javascript
-      aController.replaceRoute('blogPost', aPost);
+    aController.replaceRoute('blogPost', aPost);
     ```
 
     Multiple models will be applied last to first recursively up the
     resource tree.
 
     ```javascript
+    this.resource('blogPost', {path:':blogPostId'}, function(){
+      this.resource('blogComment', {path: ':blogCommentId'});
+    });
 
-      this.resource('blogPost', {path:':blogPostId'}, function(){
-        this.resource('blogComment', {path: ':blogCommentId'});
-      });
-      
-      aController.replaceRoute('blogComment', aPost, aComment);
+    aController.replaceRoute('blogComment', aPost, aComment);
     ```
 
     @param {String} name the name of the route
@@ -113,3 +114,92 @@ Ember.ControllerMixin.reopen({
     return this.replaceRoute.apply(this, arguments);
   }
 });
+
+if (Ember.FEATURES.isEnabled("query-params-new")) {
+  Ember.ControllerMixin.reopen({
+
+    concatenatedProperties: ['queryParams'],
+
+    queryParams: null,
+
+    _queryParamScope: null,
+
+    _finalizingQueryParams: false,
+    _queryParamHash: Ember.computed(function computeQueryParamHash() {
+
+      // Given: queryParams: ['foo', 'bar:baz'] on controller:thing
+      // _queryParamHash should yield: { 'foo': 'thing[foo]' }
+
+      var result = {};
+      var queryParams = this.queryParams;
+      if (!queryParams) {
+        return result;
+      }
+
+      for (var i = 0, len = queryParams.length; i < len; ++i) {
+        var full = queryParams[i];
+        var parts = full.split(':');
+        var key = parts[0];
+        var urlKey = parts[1];
+        if (!urlKey) {
+          if (this._queryParamScope) {
+            urlKey = this._queryParamScope + '[' + key + ']';
+          } else {
+            urlKey = key;
+          }
+        }
+        result[key] = urlKey;
+      }
+
+      return result;
+    }),
+
+    _activateQueryParamObservers: function() {
+      var queryParams = get(this, '_queryParamHash');
+
+      for (var k in queryParams) {
+        if (queryParams.hasOwnProperty(k)) {
+          this.addObserver(k, this, this._queryParamChanged);
+          this.addObserver(k + '.[]', this, this._queryParamChanged);
+        }
+      }
+    },
+
+    _deactivateQueryParamObservers: function() {
+      var queryParams = get(this, '_queryParamHash');
+
+      for (var k in queryParams) {
+        if (queryParams.hasOwnProperty(k)) {
+          this.removeObserver(k, this, this._queryParamChanged);
+          this.removeObserver(k + '.[]', this, this._queryParamChanged);
+        }
+      }
+    },
+
+    _queryParamChanged: function(controller, key) {
+      // Normalize array observer firings.
+      if (key.slice(key.length - 3) === '.[]') {
+        key = key.substr(0, key.length-3);
+      }
+
+      if (this._finalizingQueryParams) {
+        var changes = this._queryParamChangesDuringSuspension;
+        if (changes) {
+          changes[key] = true;
+        }
+        return;
+      }
+
+      var queryParams = get(this, '_queryParamHash');
+      queuedQueryParamChanges[queryParams[key]] = Ember.copy(get(this, key));
+      Ember.run.once(this, this._fireQueryParamTransition);
+    },
+
+    _fireQueryParamTransition: function() {
+      this.transitionToRoute({ queryParams: queuedQueryParamChanges });
+      queuedQueryParamChanges = {};
+    },
+
+    _queryParamChangesDuringSuspension: null
+  });
+}

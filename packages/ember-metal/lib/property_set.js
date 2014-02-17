@@ -13,16 +13,6 @@ var META_KEY = Ember.META_KEY,
   property is not defined but the object implements the `setUnknownProperty`
   method then that will be invoked as well.
 
-  If you plan to run on IE8 and older browsers then you should use this
-  method anytime you want to set a property on an object that you don't
-  know for sure is private. (Properties beginning with an underscore '_'
-  are considered private.)
-
-  On all newer browsers, you only need to use this method to set
-  properties if the property might not be defined on the object and you want
-  to respect the `setUnknownProperty` handler. Otherwise you can ignore this
-  method.
-
   @method set
   @for Ember
   @param {Object} obj The object to modify.
@@ -69,7 +59,7 @@ var set = function set(obj, keyName, value, tolerant) {
       if (value !== currentValue) {
         Ember.propertyWillChange(obj, keyName);
         if (MANDATORY_SETTER) {
-          if (currentValue === undefined && !(keyName in obj)) {
+          if ((currentValue === undefined && !(keyName in obj)) || !obj.propertyIsEnumerable(keyName)) {
             Ember.defineProperty(obj, keyName, null, value); // setup mandatory setter
           } else {
             meta.values[keyName] = value;
@@ -109,12 +99,12 @@ function setPath(root, path, value, tolerant) {
   }
 
   if (!keyName || keyName.length === 0) {
-    throw new Ember.Error('You passed an empty path');
+    throw new Ember.Error('Property set failed: You passed an empty path');
   }
 
   if (!root) {
     if (tolerant) { return; }
-    else { throw new Ember.Error('Object in path '+path+' could not be found or was destroyed.'); }
+    else { throw new Ember.Error('Property set failed: object in path "'+path+'" could not be found or was destroyed.'); }
   }
 
   return set(root, keyName, value);

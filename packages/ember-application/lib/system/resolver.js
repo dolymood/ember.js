@@ -92,7 +92,10 @@ Ember.DefaultResolver = Ember.Object.extend({
         type = split[0],
         name = split[1];
 
-    Ember.assert("Tried to normalize a container name without a colon (:) in it. You probably tried to lookup a name that did not contain a type, a colon, and a name. A proper lookup name would be `view:post`.", split.length === 2);
+    Ember.assert("Tried to normalize a container name without a colon (:) in " +
+                 "it. You probably tried to lookup a name that did not contain " +
+                 "a type, a colon, and a name. A proper lookup name would be " +
+                 "`view:post`.", split.length === 2);
 
     if (type !== 'template') {
       var result = name;
@@ -123,14 +126,14 @@ Ember.DefaultResolver = Ember.Object.extend({
   */
   resolve: function(fullName) {
     var parsedName = this.parseName(fullName),
-        typeSpecificResolveMethod = this[parsedName.resolveMethodName];
+        resolveMethodName = parsedName.resolveMethodName;
 
-    if (!parsedName.name || !parsedName.type) {
-      throw new TypeError("Invalid fullName: `" + fullName + "`, must of of the form `type:name` ");
+    if (!(parsedName.name && parsedName.type)) {
+      throw new TypeError("Invalid fullName: `" + fullName + "`, must be of the form `type:name` ");
     }
 
-    if (typeSpecificResolveMethod) {
-      var resolved = typeSpecificResolveMethod.call(this, parsedName);
+    if (this[resolveMethodName]) {
+      var resolved = this[resolveMethodName](parsedName);
       if (resolved) { return resolved; }
     }
     return this.resolveOther(parsedName);

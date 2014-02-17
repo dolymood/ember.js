@@ -90,13 +90,12 @@ if (Ember.config.overrideAccessors) {
 }
 
 /**
-  @private
-
   Normalizes a target/path pair to reflect that actual target/path that should
   be observed, etc. This takes into account passing in global property
   paths (i.e. a path beginning with a captial letter not defined on the
   target) and * separators.
 
+  @private
   @method normalizeTuple
   @for Ember
   @param {Object} target The current target. May be `null`.
@@ -118,7 +117,7 @@ var normalizeTuple = Ember.normalizeTuple = function(target, path) {
   }
 
   // must return some kind of path to be valid else other things will break.
-  if (!path || path.length===0) throw new Ember.Error('Invalid Path');
+  if (!path || path.length===0) throw new Ember.Error('Path cannot be empty');
 
   return [ target, path ];
 };

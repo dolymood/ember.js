@@ -3,9 +3,13 @@
 @submodule ember-routing
 */
 
-var Router = requireModule("router")['default'];
-var get = Ember.get, set = Ember.set;
+var routerJsModule = requireModule("router");
+var Router = routerJsModule.Router;
+var Transition = routerJsModule.Transition;
+var get = Ember.get, set = Ember.set, fmt = Ember.String.fmt;
 var defineProperty = Ember.defineProperty;
+var slice = Array.prototype.slice;
+var forEach = Ember.EnumerableUtils.forEach;
 
 var DefaultView = Ember._MetamorphView;
 
@@ -20,25 +24,68 @@ require("ember-routing/system/dsl");
   @extends Ember.Object
 */
 Ember.Router = Ember.Object.extend(Ember.Evented, {
+  /**
+    The `location` property determines the type of URL's that your
+    application will use.
+
+    The following location types are currently available:
+
+    * `hash`
+    * `history`
+    * `none`
+
+    @property location
+    @default 'hash'
+    @see {Ember.Location}
+  */
   location: 'hash',
 
   init: function() {
     this.router = this.constructor.router || this.constructor.map(Ember.K);
     this._activeViews = {};
     this._setupLocation();
+
+    if (get(this, 'namespace.LOG_TRANSITIONS_INTERNAL')) {
+      this.router.log = Ember.Logger.debug;
+    }
   },
 
+  /**
+    Represents the current URL.
+
+    @method url
+    @returns {String} The current URL.
+  */
   url: Ember.computed(function() {
     return get(this, 'location').getURL();
   }),
 
+  /**
+    Initializes the current router instance and sets up the change handling
+    event listeners used by the instances `location` implementation.
+
+    A property named `initialURL` will be used to determine the initial URL.
+    If no value is found `/` will be used.
+
+    @method startRouting
+    @private
+  */
   startRouting: function() {
     this.router = this.router || this.constructor.map(Ember.K);
 
     var router = this.router,
         location = get(this, 'location'),
         container = this.container,
-        self = this;
+        self = this,
+        initialURL = get(this, 'initialURL');
+
+    if (Ember.FEATURES.isEnabled("ember-routing-auto-location")) {
+      // Allow the Location class to cancel the router setup while it refreshes
+      // the page
+      if (get(location, 'cancelRouterSetup')) {
+        return;
+      }
+    }
 
     this._setupRouter(router, location);
 
@@ -49,9 +96,22 @@ Ember.Router = Ember.Object.extend(Ember.Evented, {
       self.handleURL(url);
     });
 
-    this.handleURL(location.getURL());
+    if (typeof initialURL === "undefined") {
+      initialURL = location.getURL();
+    }
+
+    this.handleURL(initialURL);
   },
 
+  /**
+    Handles updating the paths and notifying any listeners of the URL
+    change.
+
+    Triggers the router level `didTransition` hook.
+
+    @method didTransition
+    @private
+  */
   didTransition: function(infos) {
     updatePaths(this);
 
@@ -96,6 +156,14 @@ Ember.Router = Ember.Object.extend(Ember.Evented, {
     return this.location.formatURL(url);
   },
 
+  /**
+    Determines if the supplied route is currently active.
+
+    @method isActive
+    @param routeName
+    @returns {Boolean}
+    @private
+  */
   isActive: function(routeName) {
     var router = this.router;
     return router.isActive.apply(router, arguments);
@@ -105,16 +173,22 @@ Ember.Router = Ember.Object.extend(Ember.Evented, {
     this.router.trigger.apply(this.router, arguments);
   },
 
+  /**
+    Does this router instance have the given route.
+
+    @method hasRoute
+    @returns {Boolean}
+    @private
+  */
   hasRoute: function(route) {
     return this.router.hasRoute(route);
   },
 
   /**
-    @private
-
     Resets the state of the router by clearing the current route
     handlers and deactivating them.
 
+    @private
     @method reset
    */
   reset: function() {
@@ -161,6 +235,10 @@ Ember.Router = Ember.Object.extend(Ember.Evented, {
     if (typeof rootURL === 'string') {
       location.rootURL = rootURL;
     }
+
+    // ensure that initState is called AFTER the rootURL is set on
+    // the location instance
+    if (typeof location.initState === 'function') { location.initState(); }
   },
 
   _getHandlerFunction: function() {
@@ -222,35 +300,67 @@ Ember.Router = Ember.Object.extend(Ember.Evented, {
 
   _doTransition: function(method, args) {
     // Normalize blank route to root URL.
-    args = [].slice.call(args);
+    args = slice.call(args);
     args[0] = args[0] || '/';
 
-    var passedName = args[0], name, self = this,
-      isQueryParamsOnly = false;
+    var name = args[0], self = this,
+      isQueryParamsOnly = false, queryParams;
 
-    if (Ember.FEATURES.isEnabled("query-params")) {
-      isQueryParamsOnly = (args.length === 1 && args[0].hasOwnProperty('queryParams'));
+    if (Ember.FEATURES.isEnabled("query-params-new")) {
+
+      var possibleQueryParamArg = args[args.length - 1];
+      if (possibleQueryParamArg && possibleQueryParamArg.hasOwnProperty('queryParams')) {
+        if (args.length === 1) {
+          isQueryParamsOnly = true;
+          name = null;
+        }
+        queryParams = args[args.length - 1].queryParams;
+      }
     }
 
-    if (!isQueryParamsOnly && passedName.charAt(0) === '/') {
-      name = passedName;
-    } else if (!isQueryParamsOnly) {
-      if (!this.router.hasRoute(passedName)) {
-        name = args[0] = passedName + '.index';
-      } else {
-        name = passedName;
+    if (!isQueryParamsOnly && name.charAt(0) !== '/') {
+      Ember.assert("The route " + name + " was not found", this.router.hasRoute(name));
+    }
+
+    if (queryParams) {
+      // router.js expects queryParams to be passed in in
+      // their final serialized form, so we need to translate.
+
+      if (!name) {
+        // Need to determine destination route name.
+        var handlerInfos = this.router.activeTransition ?
+                           this.router.activeTransition.state.handlerInfos :
+                           this.router.state.handlerInfos;
+        name = handlerInfos[handlerInfos.length - 1].name;
+        args.unshift(name);
       }
 
-      Ember.assert("The route " + passedName + " was not found", this.router.hasRoute(name));
+      var qpMappings = this._queryParamNamesFor(name);
+
+
+      Ember.Router._translateQueryParams(queryParams, qpMappings.translations, name);
+      var value;
+      for (var key in queryParams) {
+        var descopedParam = Ember.Router._descopeQueryParam(key);
+        if (key in qpMappings.queryParams) {
+          value = queryParams[key];
+          delete queryParams[key];
+          queryParams[qpMappings.queryParams[key]] = value;
+        } else if (descopedParam in qpMappings.validQueryParams) {
+          value = queryParams[key];
+          delete queryParams[key];
+          queryParams[descopedParam] = value;
+        }
+      }
     }
 
     var transitionPromise = this.router[method].apply(this.router, args);
 
     transitionPromise.then(null, function(error) {
-      if (error.name === "UnrecognizedURLError") {
+      if (error && error.name === "UnrecognizedURLError") {
         Ember.assert("The URL '" + error.message + "' did not match any routes in your application");
       }
-    });
+    }, 'Ember: Check for Router unrecognized URL error');
 
     // We want to return the configurable promise object
     // so that callers of this function can use `.method()` on it,
@@ -278,20 +388,158 @@ Ember.Router = Ember.Object.extend(Ember.Evented, {
       Ember.run.cancel(this._loadingStateTimer);
     }
     this._loadingStateTimer = null;
+  },
+
+  _queryParamNamesFor: function(routeName) {
+
+    // TODO: add caching
+
+    var handlerInfos = this.router.recognizer.handlersFor(routeName);
+    var result = { queryParams: Ember.create(null), translations: Ember.create(null), validQueryParams: Ember.create(null) };
+    var routerjs = this.router;
+    forEach(handlerInfos, function(recogHandler) {
+      var route = routerjs.getHandler(recogHandler.handler);
+      getQueryParamsForRoute(route, result);
+    });
+
+    descopeQueryParams(result.queryParams);
+
+    for (var k in result.queryParams) {
+      result.validQueryParams[result.queryParams[k]] = true;
+    }
+    return result;
+  },
+
+  _queryParamNamesForSingle: function(routeName) {
+
+    // TODO: add caching
+
+    var result = { queryParams: Ember.create(null), translations: Ember.create(null) };
+    var route = this.router.getHandler(routeName);
+
+    getQueryParamsForRoute(route, result);
+
+    // Descope non duplicate params.
+    if (routeName !== 'application') {
+      var allParams = this._queryParamNamesFor(routeName);
+      for (var k in result.queryParams) {
+        result.queryParams[k] = allParams.queryParams[k];
+      }
+    }
+
+    return result;
+  },
+
+  /**
+    @private
+
+    Utility function for fetching all the current query params
+    values from a controller.
+   */
+  _queryParamOverrides: function(results, queryParams, callback) {
+    for (var name in queryParams) {
+      var parts = name.split(':');
+
+      var controller = controllerOrProtoFor(parts[0], this.container);
+      Ember.assert(fmt("Could not lookup controller '%@' while setting up query params", [controller]), controller);
+
+      // Now assign the final URL-serialized key-value pair,
+      // e.g. "foo[propName]": "value"
+      results[queryParams[name]] = get(controller, parts[1]);
+
+      if (callback) {
+        // Give callback a chance to override.
+        callback(name, queryParams[name], name);
+      }
+    }
   }
 });
 
 /**
   @private
+ */
+function getQueryParamsForRoute(route, result) {
+  var controllerName = route.controllerName || route.routeName,
+      controller = controllerOrProtoFor(controllerName, route.container),
+      queryParams = get(controller, 'queryParams');
 
+  if (queryParams) {
+    forEach(queryParams, function(propName) {
+
+      var parts = propName.split(':');
+
+      var urlKeyName;
+      if (parts.length > 1) {
+        urlKeyName = parts[1];
+      } else {
+        // TODO: use _queryParamScope here?
+        if (controllerName !== 'application') {
+          urlKeyName = controllerName + '[' + propName + ']';
+        } else {
+          urlKeyName = propName;
+        }
+      }
+
+      var controllerFullname = controllerName + ':' + propName;
+
+      result.queryParams[controllerFullname] = urlKeyName;
+      result.translations[parts[0]] = controllerFullname;
+    });
+  }
+}
+
+function controllerOrProtoFor(controllerName, container) {
+  var fullName = 'controller:' + controllerName;
+  if (container.cache.has(fullName)) {
+    return container.lookup(fullName);
+  } else {
+    // Controller hasn't been instantiated yet; just return its proto.
+    var controllerClass = container.lookupFactory(fullName);
+    if (controllerClass && typeof controllerClass.proto === 'function') {
+      return controllerClass.proto();
+    } else {
+      return {};
+    }
+  }
+}
+
+function descopeQueryParams(params) {
+  var paramCounts = {},
+      descopedParam,
+      k;
+
+  // Loop through params and count the occurance of descoped param
+  for (k in params) {
+    descopedParam = Ember.Router._descopeQueryParam(params[k]);
+
+    if (!paramCounts[descopedParam]) {
+      paramCounts[descopedParam] = 1;
+    } else {
+      paramCounts[descopedParam] = paramCounts[descopedParam] + 1;
+    }
+  }
+
+  // Loop through again descoping params if the descoped key only occurs once
+  for (k in params) {
+    descopedParam = Ember.Router._descopeQueryParam(params[k]);
+
+    if (paramCounts[descopedParam] === 1) {
+      params[k] = descopedParam;
+    }
+  }
+}
+
+/**
   Helper function for iterating root-ward, starting
   from (but not including) the provided `originRoute`.
 
   Returns true if the last callback fired requested
   to bubble upward.
+
+  @private
  */
 function forEachRouteAbove(originRoute, transition, callback) {
-  var handlerInfos = transition.handlerInfos,
+  var handlerInfos = transition.state.handlerInfos,
       originRouteFound = false;
 
   for (var i = handlerInfos.length - 1; i >= 0; --i) {
@@ -344,7 +592,7 @@ var defaultActionHandlers = {
       return;
     }
 
-    Ember.Logger.assert(false, 'Error while loading route: ' + Ember.inspect(error));
+    Ember.Logger.error('Error while loading route: ' + (error && error.stack));
   },
 
   loading: function(transition, originRoute) {
@@ -431,7 +679,7 @@ function triggerEvent(handlerInfos, ignoreFailure, args) {
   }
 
   if (!eventWasHandled && !ignoreFailure) {
-    throw new Ember.Error("Nothing handled the action '" + name + "'.");
+    throw new Ember.Error("Nothing handled the action '" + name + "'. If you did handle the action, this error can be caused by returning true from an action handler in a controller, causing the action to bubble.");
   }
 }
 
@@ -472,10 +720,6 @@ Ember.Router.reopenClass({
       this.reopenClass({ router: router });
     }
 
-    if (get(this, 'namespace.LOG_TRANSITIONS_INTERNAL')) {
-      router.log = Ember.Logger.debug;
-    }
-
     var dsl = Ember.RouterDSL.map(function() {
       this.resource('application', { path: "/" }, function() {
         for (var i=0; i < router.callbacks.length; i++) {
@@ -493,17 +737,62 @@ Ember.Router.reopenClass({
   _routePath: function(handlerInfos) {
     var path = [];
 
+    // We have to handle coalescing resource names that
+    // are prefixed with their parent's names, e.g.
+    // ['foo', 'foo.bar.baz'] => 'foo.bar.baz', not 'foo.foo.bar.baz'
+
+    function intersectionMatches(a1, a2) {
+      for (var i = 0, len = a1.length; i < len; ++i) {
+        if (a1[i] !== a2[i]) {
+          return false;
+        }
+      }
+      return true;
+    }
+
     for (var i=1, l=handlerInfos.length; i<l; i++) {
       var name = handlerInfos[i].name,
-          nameParts = name.split(".");
+          nameParts = name.split("."),
+          oldNameParts = slice.call(path);
 
-      path.push(nameParts[nameParts.length - 1]);
+      while (oldNameParts.length) {
+        if (intersectionMatches(oldNameParts, nameParts)) {
+          break;
+        }
+        oldNameParts.shift();
+      }
+
+      path.push.apply(path, nameParts.slice(oldNameParts.length));
     }
 
     return path.join(".");
+  },
+
+  _translateQueryParams: function(queryParams, translations, routeName) {
+    for (var name in queryParams) {
+      if (!queryParams.hasOwnProperty(name)) { continue; }
+
+      if (name in translations) {
+        queryParams[translations[name]] = queryParams[name];
+        delete queryParams[name];
+      } else {
+        Ember.assert(fmt("You supplied an unknown query param controller property '%@' for route '%@'. Only the following query param properties can be set for this route: %@", [name, routeName, Ember.keys(translations)]), name in queryParams);
+      }
+    }
+  },
+
+  _descopeQueryParam: function(param) {
+    var regex = /\[(.+)\]/,
+        result = param.match(regex);
+
+    if (!result) {
+      result = param;
+    } else {
+      result = result[1];
+    }
+
+    return result;
   }
 });
-
-Router.Transition.prototype.send = Router.Transition.prototype.trigger;
 
 

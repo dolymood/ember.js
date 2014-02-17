@@ -393,30 +393,28 @@ testBoth('redefining a property should undo old depenent keys', function(get ,se
   equal(get(obj, 'foo'), 'baz 3');
 });
 
-if (Ember.FEATURES.isEnabled('propertyBraceExpansion')) {
-  testBoth('can watch multiple dependent keys specified declaratively via brace expansion', function (get, set) {
-    Ember.defineProperty(obj, 'foo', Ember.computed(function(key, value) {
-      count++;
-      return 'foo '+count;
-    }).property('qux.{bar,baz}'));
+testBoth('can watch multiple dependent keys specified declaratively via brace expansion', function (get, set) {
+  Ember.defineProperty(obj, 'foo', Ember.computed(function(key, value) {
+    count++;
+    return 'foo '+count;
+  }).property('qux.{bar,baz}'));
 
-    equal(get(obj, 'foo'), 'foo 1', "get once");
-    equal(get(obj, 'foo'), 'foo 1', "cached retrieve");
+  equal(get(obj, 'foo'), 'foo 1', "get once");
+  equal(get(obj, 'foo'), 'foo 1', "cached retrieve");
 
-    set(obj, 'qux', {});
-    set(obj, 'qux.bar', 'bar'); // invalidate foo
+  set(obj, 'qux', {});
+  set(obj, 'qux.bar', 'bar'); // invalidate foo
 
-    equal(get(obj, 'foo'), 'foo 2', "foo invalidated from bar");
+  equal(get(obj, 'foo'), 'foo 2', "foo invalidated from bar");
 
-    set(obj, 'qux.baz', 'baz'); // invalidate foo
+  set(obj, 'qux.baz', 'baz'); // invalidate foo
 
-    equal(get(obj, 'foo'), 'foo 3', "foo invalidated from baz");
+  equal(get(obj, 'foo'), 'foo 3', "foo invalidated from baz");
 
-    set(obj, 'qux.quux', 'quux'); // do not invalidate foo
+  set(obj, 'qux.quux', 'quux'); // do not invalidate foo
 
-    equal(get(obj, 'foo'), 'foo 3', "foo not invalidated by quux");
-  });
-}
+  equal(get(obj, 'foo'), 'foo 3', "foo not invalidated by quux");
+});
 
 // ..........................................................
 // CHAINED DEPENDENT KEYS
@@ -716,7 +714,7 @@ testBoth('protects against setting', function(get, set) {
 
   raises(function() {
     set(obj, 'bar', 'newBar');
-  }, /Cannot Set: bar on:/ );
+  }, /Cannot set read\-only property "bar" on object:/ );
 
   equal(get(obj, 'bar'), 'barValue');
 });
@@ -959,26 +957,62 @@ testBoth('Ember.computed.collect', function(get, set) {
   deepEqual(get(obj, 'all'), [0, 'bar', a, true], 'have all of them');
 });
 
-testBoth('Ember.computed.oneWay', function(get, set) {
+function oneWayTest(methodName) {
+  return function(get, set) {
+    var obj = {
+      firstName: 'Teddy',
+      lastName: 'Zeenny'
+    };
+
+    Ember.defineProperty(obj, 'nickName', Ember.computed[methodName]('firstName'));
+
+    equal(get(obj, 'firstName'), 'Teddy');
+    equal(get(obj, 'lastName'), 'Zeenny');
+    equal(get(obj, 'nickName'), 'Teddy');
+
+    set(obj, 'nickName', 'TeddyBear');
+
+    equal(get(obj, 'firstName'), 'Teddy');
+    equal(get(obj, 'lastName'), 'Zeenny');
+
+    equal(get(obj, 'nickName'), 'TeddyBear');
+
+    set(obj, 'firstName', 'TEDDDDDDDDYYY');
+
+    equal(get(obj, 'nickName'), 'TeddyBear');
+  };
+}
+
+testBoth('Ember.computed.oneWay', oneWayTest('oneWay'));
+
+if (Ember.FEATURES.isEnabled('query-params-new')) {
+  testBoth('Ember.computed.reads', oneWayTest('reads'));
+}
+
+if (Ember.FEATURES.isEnabled('computed-read-only')) {
+testBoth('Ember.computed.readOnly', function(get, set) {
   var obj = {
     firstName: 'Teddy',
     lastName: 'Zeenny'
   };
 
-  Ember.defineProperty(obj, 'nickName', Ember.computed.oneWay('firstName'));
+  Ember.defineProperty(obj, 'nickName', Ember.computed.readOnly('firstName'));
 
   equal(get(obj, 'firstName'), 'Teddy');
   equal(get(obj, 'lastName'), 'Zeenny');
   equal(get(obj, 'nickName'), 'Teddy');
 
-  set(obj, 'nickName', 'TeddyBear');
+  throws(function(){
+    set(obj, 'nickName', 'TeddyBear');
+  }, / /);
 
   equal(get(obj, 'firstName'), 'Teddy');
   equal(get(obj, 'lastName'), 'Zeenny');
 
-  equal(get(obj, 'nickName'), 'TeddyBear');
+  equal(get(obj, 'nickName'), 'Teddy');
 
   set(obj, 'firstName', 'TEDDDDDDDDYYY');
 
-  equal(get(obj, 'nickName'), 'TeddyBear');
+  equal(get(obj, 'nickName'), 'TEDDDDDDDDYYY');
 });
+}

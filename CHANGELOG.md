@@ -1,13 +1,107 @@
 # Ember Changelog
 
+### Ember 1.5.0-beta.1 (February 14, 2014)
 
-### Ember 1.4.0 _(TBD)_
+* [FEATURE ember-handlebars-log-primitives]
+* [FEATURE ember-testing-routing-helpers]
+* [FEATURE ember-testing-triggerEvent-helper]
+* [FEATURE computed-read-only]
+* [FEATURE ember-metal-is-blank]
+* [FEATURE ember-eager-url-update]
+* [FEATURE ember-routing-auto-location]
+* [FEATURE ember-routing-bound-action-name]
+* [FEATURE ember-routing-inherits-parent-model]
+* [BREAKING CHANGE] `Ember.run.throttle` now supports leading edge execution. To follow industry standard leading edge is the default.
+* [BUGFIX] Fixed how parentController property of an itemController when nested. Breaking for apps that rely on previous broken behavior of an itemController's `parentController` property skipping its ArrayController when nested.
 
-* In canary
+### Ember 1.4.0 (February 13, 2014)
 
-### Ember 1.3.0 _(TBD)_
+* [SECURITY] Ensure link-to non-block escapes title.
+* Deprecate quoteless action names.
+* [BUGFIX] Make Ember.RenderBuffer#addClass work as expected.
+* [DOC] Display Ember Inspector hint in Firefox.
+* [BUGFIX] App.destroy resets routes before destroying the container.
+* [BUGFIX] reduceComputed fires observers when invalidating with undefined.
+* [BUGFIX] Provide helpful error even if Model isn't found.
+* [BUGFIX] Do not deprecate the block form of {{render}}.
+* [BUGFIX] allow enumerable/any to match undefined as value
+* [BUGFIX] Allow canceling of Timers in IE8.
+* [BUGFIX] Calling toString at extend time causes Ember.View to memoize and return the same value for different instances.
+* [BUGFIX] Fix ember-testing-lazy-routing.
+* [BUGFIX] Fixed how parentController property of an itemController when nested. Breaking for apps that rely on previous broken behavior of an itemController's `parentController` property skipping its ArrayController when nested.
+* Document the send method on Ember.ActionHandler.
+* Document Ember.Route #controllerName and #viewName properties.
+* Allow jQuery version 1.11 and 2.1.
+* [BUGFIX] Fix stripping trailing slashes for * routes.
+* [SECURITY] Ensure primitive value contexts are escaped.
+* [SECURITY] Ensure {{group}} helper escapes properly.
+* Performance improvements.
+* [BUGFIX] Templete-less components properties should not collide with internal properties.
+* Unbound helper supports bound helper static strings.
+* Preserve `<base>` URL when using history location for routing.
+* Begin adding names for anonymous functions to aid in debugging.
+* [FEATURE with-controller] {{#with}} can take a controller= option for wrapping the context. Must be an `Ember.ObjectController`
+* [FEATURE propertyBraceExpansion] Add support for brace-expansion in dependent keys, observer and watch properties.
+* [FEATURE ember-metal-run-bind] Enables `Ember.run.bind` which is ember run-loop aware variation of jQuery.proxy.
 
-* In beta
+### Ember 1.3.1 (January 14, 2014)
+
+* [SECURITY] Ensure primitive value contexts are escaped.
+* [SECURITY] Ensure {{group}} helper escapes properly.
+
+### Ember 1.3.0 (January 6, 2014)
+
+* Many documentation updates.
+* Update to RSVP 3.0.3.
+* Use defeatureify to strip debug statements allowing multi-line assert statements.
+* Added fail(), catch() and finally() methods to PromiseProxyMixin.
+* [BUGFIX] Add 'view' option to {{outlet}} helper
+* Make `Ember.compare` return `date` when appropriate.
+* Prefer `EmberENV` over `ENV`, and do not create a global `ENV` if it was not supplied.
+* `{{unbound}}` helper supports bound helper static strings.
+* [BUGFIX] Make sure mandatory setters don't change default enumerable.
+* [BUGFIX] The `render` helper now sets a `parentController` property on the child controller.
+* `{{render}}` helper now creates the controller with its model.
+* Fix bug in Metamorph.js with nested `if` statements.
+* Label promises for debugging.
+* Deprecate `RSVP.Promise.prototype.fail`.
+* Cleanup header comment: remove duplication and add version.
+* [BUGFIX] Do not attempt to serialize undefined models.
+* [BUGFIX] Ensure {{link-to}} path observers are reregistered after render.
+* [BUGFIX] Ensure that the rootURL is available to location.
+* [BUGFIX] Make routePath smarter w/ stacked resource names
+* Better link-to error for invalid dest routes
+* Use imported handlebars before global Handlebars
+* Update router.js
+* Update RSVP.js
+* Improved a handeful of error messages
+* Provide more information for debugging
+* Added more assertions and deprecation warnings
+* [BUGFIX] Add preventDefault option to link-to and action.
+* [BUGFIX] contextualizeBindingPath should be aware of empty paths
+* Expose helpful vars in {{debugger}} helper body
+* [BUGFIX] container.has should not cause injections to be run.
+* [BUGFIX] Make flag LOG_TRANSITIONS_INTERNAL work again
+* [BUGFIX] Fix default {{yield}} for Components.
+* [BUGFIX] Ensure aliased {{with}} blocks are not shared.
+* [BUGFIX] Update to latest Backburner.js.
+* [BUGFIX] Fix issue with Ember.Test.unregisterHelper.
+* [BUGFIX] Make Ember.Handlebars.makeViewHelper warning useful.
+* [FEATURE reduceComputed-non-array-dependencies] `ReduceComputedProperty`s may have non-array dependent keys. When a non-array dependent key changes, the entire property is invalidated.
+* [FEATURE ember-testing-lazy-routing] Uses an initializer to defer readiness while testing. Readiness is advanced upon the first call to `visit`.
+* [FEATURE ember-testing-wait-hooks] Allows registration of additional functions that the `wait` testing helper will call to determine if it's ready to continue.
+* [FEATURE propertyBraceExpansion] Add simple brace expansion for dependent keys and watched properties specified declaratively.  This is primarily useful with reduce computed properties, for specifying dependencies on multiple item properties of a dependent array, as with `Ember.computed.sort('items.@each.{propertyA,propertyB}', userSortFn)`.
+* [BUGFIX release] Update to Handlebars 1.1.2.
+* [BUGFIX] Register a default RSVP error handler.
+* Update to latest RSVP (80cec268).
+* [BUGFIX] Ember.Object.create now takes `undefined` as an argument.
+* Components are lazily looked up.
+* Renaming everyBy and anyBy to isEvery and isAny.
+
+###Ember 1.2.1 _(January 14, 2014)_
+
+* [SECURITY] Ensure primitive value contexts are escaped.
+* [SECURITY] Ensure {{group}} helper escapes properly.
 
 ###Ember 1.2.0 _(November 22, 2013)_
 
@@ -31,7 +125,6 @@
 * [BUGFIX] Bubble `loading` action above pivot route
 * [BUGFIX] reduceComputed ignore changes during reset.
 * [BUGFIX] reduceComputed handle out-of-range index.
-* [BUGFIX] Allow Ember.Object.create to accept an Ember.Object.
 * [FEATURE] Add support for nested loading/error substates. A loading substate will be entered when a slow-to-resolve promise is returned from one of the Route#model hooks during a transition and an appropriately-named loading template/route can be found.  An error substate will be entered when one of the Route#model hooks returns a rejecting promise and an appropriately-named error template/route can be found.
 * [FEATURE] Components and helpers registered on the container can be rendered in templates via their dasherized names. E.g. {{helper-name}} or {{component-name}}
 * [FEATURE] Add a `didTransition` hook to the router.
@@ -64,6 +157,19 @@
 * Update route recognizer
 * Allow apps with custom jquery builds to exclude the event-alias module
 * Removes long-deprecated getPath/setPath
+
+###Ember 1.1.3 _(January 13, 2014)_
+
+* [SECURITY] Ensure primitive value contexts are escaped.
+* [SECURITY] Ensure {{group}} helper escapes properly.
+
+###Ember 1.1.2 _(October 25, 2013)
+
+* [BUGFIX] Fix failures in component rendering. - Fixes #3637
+
+###Ember 1.1.1 _(October 23, 2013)_
+
+* [BUGFIX] Allow Ember.Object.create to accept an Ember.Object.
 
 ### Ember 1.1.0 _(October 21, 2013)_
 

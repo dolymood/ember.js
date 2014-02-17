@@ -24,7 +24,6 @@ module("ember-handlebars/tests/views/collection_view_test", {
     });
 
     Ember.lookup = originalLookup;
-    Ember.TESTING_DEPRECATION = false;
   }
 });
 
@@ -45,9 +44,30 @@ test("passing a block to the collection helper sets it as the template for examp
   equal(view.$('label').length, 3, 'one label element is created for each content item');
 });
 
-test("collection helper should accept relative paths", function() {
-  Ember.TESTING_DEPRECATION = true;
+test("collection helper should try to use container to resolve view", function() {
+  var container = new Ember.Container();
 
+  var CollectionView = Ember.CollectionView.extend({
+        tagName: 'ul',
+        content: Ember.A(['foo', 'bar', 'baz'])
+  });
+
+  container.register('view:collectionTest', CollectionView);
+
+  var controller = {container: container};
+  view = Ember.View.create({
+    controller: controller,
+    template: Ember.Handlebars.compile('{{#collection "collectionTest"}} <label></label> {{/collection}}')
+  });
+  
+  Ember.run(function() {
+    view.appendTo('#qunit-fixture');
+  });
+
+  equal(view.$('label').length, 3, 'one label element is created for each content item');
+});
+
+test("collection helper should accept relative paths", function() {
   view = Ember.View.create({
     template: Ember.Handlebars.compile('{{#collection view.collection}} <label></label> {{/collection}}'),
     collection: Ember.CollectionView.extend({
@@ -103,8 +123,6 @@ test("empty views should be removed when content is added to the collection (reg
 });
 
 test("should be able to specify which class should be used for the empty view", function() {
-  Ember.TESTING_DEPRECATION = true;
-
   var App;
 
   Ember.run(function() {
@@ -269,8 +287,6 @@ test("should give its item views the classBinding specified by itemClassBinding"
 });
 
 test("should give its item views the property specified by itemPropertyBinding", function() {
-  Ember.TESTING_DEPRECATION = true;
-
   TemplateTests.itemPropertyBindingTestItemView = Ember.View.extend({
     tagName: 'li'
   });

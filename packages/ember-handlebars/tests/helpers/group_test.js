@@ -71,9 +71,9 @@ test("property changes inside views should only rerender their view", function()
   equal(trim(view.$().text()), 'ohbai', "The updated value was rendered");
 });
 
-test("should work with bindAttr", function() {
+test("should work with bind-attr", function() {
   createGroupedView(
-    '<button {{bindAttr class="innerClass"}}>ohai</button>',
+    '<button {{bind-attr class="innerClass"}}>ohai</button>',
     {innerClass: 'magic'}
   );
   appendView();
@@ -212,5 +212,22 @@ test("#each with itemViewClass behaves like a normal bound #each", function() {
   equal(view.$('script').length, 2, "Correct number of Metamorph markers are output");
   equal(view.$('.ember-view').length, 3, "Correct number of views are output");
   // IE likes to add newlines
-  equal(view.$().text().replace(/\s+/g, ''), 'ErikPeterTom');
+  equal(trim(view.$().text()), 'ErikPeterTom');
+});
+
+test("should escape HTML in normal mustaches", function() {
+  createGroupedView(
+    '{{msg}}', {msg: 'you need to be more <b>bold</b>'}
+  );
+  appendView();
+  equal(view.$('b').length, 0, "does not create an element");
+  equal(view.$().text(), 'you need to be more <b>bold</b>', "inserts entities, not elements");
+});
+
+test("should not escape HTML in triple mustaches", function() {
+  createGroupedView(
+    '{{{msg}}}', {msg: 'you need to be more <b>bold</b>'}
+  );
+  appendView();
+  equal(view.$('b').length, 1, "creates an element");
 });

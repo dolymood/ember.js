@@ -51,7 +51,7 @@ var get = Ember.get, handlebarsGet = Ember.Handlebars.get, fmt = Ember.String.fm
   </div>
   ```
 
-  ### Blockless Use
+  ### Blockless use in a collection
 
   If you provide an `itemViewClass` option that has its own `template` you can
   omit the block.
@@ -131,7 +131,7 @@ var get = Ember.get, handlebarsGet = Ember.Handlebars.get, fmt = Ember.String.fm
   @return {String} HTML string
   @deprecated Use `{{each}}` helper instead.
 */
-Ember.Handlebars.registerHelper('collection', function(path, options) {
+Ember.Handlebars.registerHelper('collection', function collectionHelper(path, options) {
   Ember.deprecate("Using the {{collection}} helper without specifying a class has been deprecated as the {{each}} helper now supports the same functionality.", path !== 'collection');
 
   // If no path is provided, treat path param as options.
@@ -148,11 +148,20 @@ Ember.Handlebars.registerHelper('collection', function(path, options) {
   var inverse = options.inverse;
   var view = options.data.view;
 
+
+  var controller, container;
   // If passed a path string, convert that into an object.
   // Otherwise, just default to the standard class.
   var collectionClass;
-  collectionClass = path ? handlebarsGet(this, path, options) : Ember.CollectionView;
-  Ember.assert(fmt("%@ #collection: Could not find collection class %@", [data.view, path]), !!collectionClass);
+  if (path) {
+    controller = data.keywords.controller;
+    container = controller && controller.container;
+    collectionClass = handlebarsGet(this, path, options) || container.lookupFactory('view:' + path); 
+    Ember.assert(fmt("%@ #collection: Could not find collection class %@", [data.view, path]), !!collectionClass);
+  }
+  else {
+    collectionClass = Ember.CollectionView;
+  }
 
   var hash = options.hash, itemHash = {}, match;
 
@@ -161,11 +170,18 @@ Ember.Handlebars.registerHelper('collection', function(path, options) {
       itemViewClass;
 
   if (hash.itemView) {
-    var controller = data.keywords.controller;
-    Ember.assert('You specified an itemView, but the current context has no container to look the itemView up in. This probably means that you created a view manually, instead of through the container. Instead, use container.lookup("view:viewName"), which will properly instantiate your view.', controller && controller.container);
-    var container = controller.container;
-    itemViewClass = container.resolve('view:' + hash.itemView);
-    Ember.assert('You specified the itemView ' + hash.itemView + ", but it was not found at " + container.describe("view:" + hash.itemView) + " (and it was not registered in the container)", !!itemViewClass);
+    controller = data.keywords.controller;
+    Ember.assert('You specified an itemView, but the current context has no ' +
+                 'container to look the itemView up in. This probably means ' +
+                 'that you created a view manually, instead of through the ' +
+                 'container. Instead, use container.lookup("view:viewName"), ' +
+                 'which will properly instantiate your view.',
+                 controller && controller.container);
+    container = controller.container;
+    itemViewClass = container.lookupFactory('view:' + hash.itemView);
+    Ember.assert('You specified the itemView ' + hash.itemView + ", but it was " +
+                 "not found at " + container.describe("view:" + hash.itemView) +
+                 " (and it was not registered in the container)", !!itemViewClass);
   } else if (hash.itemViewClass) {
     itemViewClass = handlebarsGet(collectionPrototype, hash.itemViewClass, options);
   } else {

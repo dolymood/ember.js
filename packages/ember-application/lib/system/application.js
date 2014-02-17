@@ -253,13 +253,12 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
   },
 
   /**
-    @private
-
     Build the container for the current application.
 
     Also register a default application view in case the application
     itself does not.
 
+    @private
     @method buildContainer
     @return {Ember.Container} the configured container
   */
@@ -270,8 +269,6 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
   },
 
   /**
-    @private
-
     If the application has not opted out of routing and has not explicitly
     defined a router, supply a default router for the application author
     to configure.
@@ -286,6 +283,7 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
     });
     ```
 
+    @private
     @method defaultRouter
     @return {Ember.Router} the default router
   */
@@ -303,8 +301,6 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
   },
 
   /**
-    @private
-
     Automatically initialize the application once the DOM has
     become ready.
 
@@ -317,6 +313,7 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
     `advanceReadiness()` once all of your code has finished
     loading.
 
+    @private
     @method scheduleInitialize
   */
   scheduleInitialize: function() {
@@ -325,7 +322,7 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
     if (!this.$ || this.$.isReady) {
       Ember.run.schedule('actions', self, '_initialize');
     } else {
-      this.$().ready(function() {
+      this.$().ready(function runInitialize() {
         Ember.run(self, '_initialize');
       });
     }
@@ -412,9 +409,15 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
 
     ```javascript
     App.inject(<full_name or type>, <property name>, <full_name>)
-    App.inject('model:user', 'email', 'model:email')
-    App.inject('model', 'source', 'source:main')
+    App.inject('controller:application', 'email', 'model:email')
+    App.inject('controller', 'source', 'source:main')
     ```
+    Please note that injections on models are currently disabled. 
+    This was done because ember-data was not ready for fully a container aware ecosystem.
+    
+    You can enable injections on models by setting `Ember.MODEL_FACTORY_INJECTIONS` flag to `true`
+    If model factory injections are enabled, models should not be
+    accessed globally (only through `container.lookupFactory('model:modelName'))`);
 
     @method inject
     @param  factoryNameOrType {String}
@@ -427,28 +430,26 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
   },
 
   /**
-    @private
-    @deprecated
-
     Calling initialize manually is not supported.
 
     Please see Ember.Application#advanceReadiness and
     Ember.Application#deferReadiness.
 
+    @private
+    @deprecated
     @method initialize
    **/
   initialize: function() {
     Ember.deprecate('Calling initialize manually is not supported. Please see Ember.Application#advanceReadiness and Ember.Application#deferReadiness');
   },
   /**
-    @private
-
     Initialize the application. This happens automatically.
 
     Run any initializers and run the application load hook. These hooks may
     choose to defer readiness. For example, an authentication hook might want
     to defer readiness until the auth token has been retrieved.
 
+    @private
     @method _initialize
   */
   _initialize: function() {
@@ -602,12 +603,11 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
   },
 
   /**
-    @private
-
     Setup up the event dispatcher to receive events on the
     application's `rootElement` with any registered
     `customEvents`.
 
+    @private
     @method setupEventDispatcher
   */
   setupEventDispatcher: function() {
@@ -620,11 +620,10 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
   },
 
   /**
-    @private
-
     trigger a new call to `route` whenever the URL changes.
     If the application has a router, use it to route to the current URL, and
 
+    @private
     @method startRouting
     @property router {Ember.Router}
   */
@@ -667,6 +666,8 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
 
   willDestroy: function() {
     Ember.BOOTED = false;
+    // Ensure deactivation of routes before objects are destroyed
+    this.__container__.lookup('router:main').reset();
 
     this.__container__.destroy();
   },
@@ -697,8 +698,6 @@ Ember.Application.reopenClass({
   },
 
   /**
-    @private
-
     This creates a container with the default Ember naming conventions.
 
     It also configures the container:
@@ -716,6 +715,7 @@ Ember.Application.reopenClass({
     * the application view receives the application template as its
       `defaultTemplate` property
 
+    @private
     @method buildContainer
     @static
     @param {Ember.Application} namespace the application to build the
@@ -749,6 +749,10 @@ Ember.Application.reopenClass({
     container.register('router:main',  Ember.Router);
     container.injection('router:main', 'namespace', 'application:main');
 
+    if (Ember.FEATURES.isEnabled("ember-routing-auto-location")) {
+      container.register('location:auto', Ember.AutoLocation);
+    }
+    
     container.register('location:hash', Ember.HashLocation);
     container.register('location:history', Ember.HistoryLocation);
     container.register('location:none', Ember.NoneLocation);
@@ -763,8 +767,6 @@ Ember.Application.reopenClass({
 });
 
 /**
-  @private
-
   This function defines the default lookup rules for container lookups:
 
   * templates are looked up on `Ember.TEMPLATES`
@@ -775,6 +777,7 @@ Ember.Application.reopenClass({
   This allows the application to register default injections in the container
   that could be overridden by the normal naming convention.
 
+  @private
   @method resolverFor
   @param {Ember.Namespace} namespace the namespace to look for classes
   @return {*} the resolved value for a given lookup

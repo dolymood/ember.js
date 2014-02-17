@@ -45,6 +45,24 @@ test("should begin disabled if the disabled attribute is true", function() {
   ok(select.$().is(":disabled"));
 });
 
+test("should begin required if the required attribute is true", function() {
+  select.set('required', true);
+  append();
+
+  equal(select.$().attr('required'), 'required');
+});
+
+test("should become required if the required attribute is changed", function() {
+  append();
+  equal(select.$().attr('required'), undefined);
+
+  Ember.run(function() { select.set('required', true); });
+  equal(select.$().attr('required'), 'required');
+
+  Ember.run(function() { select.set('required', false); });
+  equal(select.$().attr('required'), undefined);
+});
+
 test("should become disabled if the disabled attribute is changed", function() {
   append();
   ok(select.$().is(":not(:disabled)"));
@@ -63,7 +81,7 @@ test("can have options", function() {
 
   equal(select.$('option').length, 3, "Should have three options");
   // IE 8 adds whitespace
-  equal(select.$().text().replace(/\s+/g,''), "123", "Options should have content");
+  equal(trim(select.$().text()), "123", "Options should have content");
 });
 
 
@@ -102,7 +120,7 @@ test("can specify the property path for an option's label and value", function()
 
   equal(select.$('option').length, 2, "Should have two options");
   // IE 8 adds whitespace
-  equal(select.$().text().replace(/\s+/g,''), "YehudaTom", "Options should have content");
+  equal(trim(select.$().text()), "YehudaTom", "Options should have content");
   deepEqual(map(select.$('option').toArray(), function(el) { return Ember.$(el).attr('value'); }), ["1", "2"], "Options should have values");
 });
 
@@ -330,8 +348,8 @@ test("select with group can group options", function() {
   });
   equal(labels.join(''), ['TildeEnvato']);
 
-  equal(select.$('optgroup').first().text().replace(/\s+/g,''), 'YehudaTom');
-  equal(select.$('optgroup').last().text().replace(/\s+/g,''), 'Keith');
+  equal(trim(select.$('optgroup').first().text()), 'YehudaTom');
+  equal(trim(select.$('optgroup').last().text()), 'Keith');
 });
 
 test("select with group doesn't break options", function() {
@@ -351,7 +369,7 @@ test("select with group doesn't break options", function() {
   append();
 
   equal(select.$('option').length, 3);
-  equal(select.$().text().replace(/\s+/g,''), 'YehudaTomKeith');
+  equal(trim(select.$().text()), 'YehudaTomKeith');
 
   Ember.run(function() {
     content.set('firstObject.firstName', 'Peter');

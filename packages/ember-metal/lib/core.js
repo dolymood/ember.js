@@ -1,4 +1,4 @@
-/*globals Em:true ENV */
+/*globals Em:true ENV EmberENV MetamorphENV:true */
 
 /**
 @module ember
@@ -50,32 +50,45 @@ Ember.toString = function() { return "Ember"; };
   @property VERSION
   @type String
   @default 'VERSION_STRING_PLACEHOLDER'
-  @final
+  @static
 */
 Ember.VERSION = 'VERSION_STRING_PLACEHOLDER';
 
 /**
-  Standard environmental variables. You can define these in a global `ENV`
-  variable before loading Ember to control various configuration
-  settings.
+  Standard environmental variables. You can define these in a global `EmberENV`
+  variable before loading Ember to control various configuration settings.
+
+  For backwards compatibility with earlier versions of Ember the global `ENV`
+  variable will be used if `EmberENV` is not defined.
 
   @property ENV
   @type Hash
 */
 
-if ('undefined' === typeof ENV) {
-  exports.ENV = {};
+// This needs to be kept in sync with the logic in
+// `packages/ember-debug/lib/main.js`.
+if (Ember.ENV) {
+  // do nothing if Ember.ENV is already setup
+} else if ('undefined' !== typeof EmberENV) {
+  Ember.ENV = EmberENV;
+} else if('undefined' !== typeof ENV) {
+  Ember.ENV = ENV;
+} else {
+  Ember.ENV = {};
 }
-
-// We disable the RANGE API by default for performance reasons
-if ('undefined' === typeof ENV.DISABLE_RANGE_API) {
-  ENV.DISABLE_RANGE_API = true;
-}
-
-
-Ember.ENV = Ember.ENV || ENV;
 
 Ember.config = Ember.config || {};
+
+// We disable the RANGE API by default for performance reasons
+if ('undefined' === typeof Ember.ENV.DISABLE_RANGE_API) {
+  Ember.ENV.DISABLE_RANGE_API = true;
+}
+
+if ("undefined" === typeof MetamorphENV) {
+  exports.MetamorphENV = {};
+}
+
+MetamorphENV.DISABLE_RANGE_API = Ember.ENV.DISABLE_RANGE_API;
 
 /**
   Hash of enabled Canary features. Add to before creating your application.
@@ -269,5 +282,32 @@ Ember.none = Ember.deprecateFunc("Ember.none is deprecated. Please use Ember.isN
 Ember.isEmpty = function(obj) {
   return Ember.isNone(obj) || (obj.length === 0 && typeof obj !== 'function') || (typeof obj === 'object' && Ember.get(obj, 'length') === 0);
 };
-Ember.empty = Ember.deprecateFunc("Ember.empty is deprecated. Please use Ember.isEmpty instead.", Ember.isEmpty) ;
+Ember.empty = Ember.deprecateFunc("Ember.empty is deprecated. Please use Ember.isEmpty instead.", Ember.isEmpty);
 
+if (Ember.FEATURES.isEnabled('ember-metal-is-blank')) {
+  /**
+    A value is blank if it is empty or a whitespace string.
+
+    ```javascript
+    Ember.isBlank();                // true
+    Ember.isBlank(null);            // true
+    Ember.isBlank(undefined);       // true
+    Ember.isBlank('');              // true
+    Ember.isBlank([]);              // true
+    Ember.isBlank('\n\t');          // true
+    Ember.isBlank('  ');            // true
+    Ember.isBlank({});              // false
+    Ember.isBlank('\n\t Hello');    // false
+    Ember.isBlank('Hello world');   // false
+    Ember.isBlank([1,2,3]);         // false
+    ```
+
+    @method isBlank
+    @for Ember
+    @param {Object} obj Value to test
+    @return {Boolean}
+  */
+  Ember.isBlank = function(obj) {
+    return Ember.isEmpty(obj) || (typeof obj === 'string' && obj.match(/\S/) === null);
+  };
+}

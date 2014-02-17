@@ -1,6 +1,5 @@
 require("ember-handlebars/controls/checkbox");
 require("ember-handlebars/controls/text_field");
-require("ember-handlebars/controls/button");
 require("ember-handlebars/controls/text_area");
 require("ember-handlebars/controls/select");
 
@@ -20,14 +19,18 @@ require("ember-handlebars/controls/select");
   An `{{input}}` with no `type` or a `type` of `text` will render an HTML text input.
   The following HTML attributes can be set via the helper:
 
-* `value`
-* `size`
-* `name`
-* `pattern`
-* `placeholder`
-* `disabled`
-* `maxlength`
-* `tabindex`
+ <table>
+  <tr><td>`readonly`</td><td>`required`</td><td>`autofocus`</td></tr>
+  <tr><td>`value`</td><td>`placeholder`</td><td>`disabled`</td></tr>
+  <tr><td>`size`</td><td>`tabindex`</td><td>`maxlength`</td></tr>
+  <tr><td>`name`</td><td>`min`</td><td>`max`</td></tr>
+  <tr><td>`pattern`</td><td>`accept`</td><td>`autocomplete`</td></tr>
+  <tr><td>`autosave`</td><td>`formaction`</td><td>`formenctype`</td></tr>
+  <tr><td>`formmethod`</td><td>`formnovalidate`</td><td>`formtarget`</td></tr>
+  <tr><td>`height`</td><td>`inputmode`</td><td>`multiple`</td></tr>
+  <tr><td>`step`</td><td>`width`</td><td>`form`</td></tr>
+  <tr><td>`selectionDirection`</td><td>`spellcheck`</td><td>&nbsp;</td></tr>
+ </table>
 
 
   When set to a quoted string, these values will be directly applied to the HTML
@@ -72,6 +75,7 @@ require("ember-handlebars/controls/select");
   if you are deploying to browsers where the `required` attribute is used, you
   can add this to the `TextField`'s `attributeBindings` property:
 
+
   ```javascript
   Ember.TextField.reopen({
     attributeBindings: ['required']
@@ -95,6 +99,8 @@ require("ember-handlebars/controls/select");
 * `tabindex`
 * `indeterminate`
 * `name`
+* `autofocus`
+* `form`
 
 
   When set to a quoted string, these values will be directly applied to the HTML
@@ -136,6 +142,7 @@ require("ember-handlebars/controls/select");
   capablilties of checkbox inputs in your applications by reopening this class. For example,
   if you wanted to add a css class to all checkboxes in your application:
 
+
   ```javascript
   Ember.Checkbox.reopen({
     classNames: ['my-app-checkbox']
@@ -159,6 +166,7 @@ Ember.Handlebars.registerHelper('input', function(options) {
   delete hash.on;
 
   if (inputType === 'checkbox') {
+    Ember.assert("{{input type='checkbox'}} does not support setting `value=someBooleanValue`; you must use `checked=someBooleanValue` instead.", options.hashTypes.value !== 'ID');
     return Ember.Handlebars.helpers.view.call(this, Ember.Checkbox, options);
   } else {
     if (inputType) { hash.type = inputType; }
@@ -182,6 +190,15 @@ Ember.Handlebars.registerHelper('input', function(options) {
     * `disabled`
     * `maxlength`
     * `tabindex`
+    * `selectionEnd`
+    * `selectionStart`
+    * `selectionDirection`
+    * `wrap`
+    * `readonly`
+    * `autofocus`
+    * `form`
+    * `spellcheck`
+    * `required`
 
   When set to a quoted string, these value will be directly applied to the HTML
   element. When left unquoted, these values will be bound to a property on the
@@ -294,7 +311,7 @@ Ember.Handlebars.registerHelper('input', function(options) {
   extend the capabilities of text areas in your application by reopening this
   class. For example, if you are deploying to browsers where the `required`
   attribute is used, you can globally add support for the `required` attribute
-  on all {{textarea}}'s' in your app by reopening `Ember.TextArea` or
+  on all `{{textarea}}`s' in your app by reopening `Ember.TextArea` or
   `Ember.TextSupport` and adding it to the `attributeBindings` concatenated
   property:
 

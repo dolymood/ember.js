@@ -5,21 +5,20 @@
 
 var get = Ember.get, set = Ember.set, fmt = Ember.String.fmt;
 
+var slice = Array.prototype.slice;
+
 require('ember-handlebars/helpers/view');
 
 Ember.onLoad('Ember.Handlebars', function(Handlebars) {
 
+  var QueryParams = Ember.Object.extend({
+    values: null
+  });
+
   var resolveParams = Ember.Router.resolveParams,
+      translateQueryParams = Ember.Router._translateQueryParams,
       resolvePaths  = Ember.Router.resolvePaths,
       isSimpleClick = Ember.ViewUtils.isSimpleClick;
-
-  function fullRouteName(router, name) {
-    if (!router.hasRoute(name)) {
-      name = name + '.index';
-    }
-
-    return name;
-  }
 
   function getResolvedPaths(options) {
 
@@ -177,18 +176,36 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
       this._super.apply(this, arguments);
 
       // Map desired event name to invoke function
-      var eventName = get(this, 'eventName');
+      var eventName = get(this, 'eventName'), i;
       this.on(eventName, this, this._invoke);
+    },
 
+    /**
+      This method is invoked by observers installed during `init` that fire
+      whenever the params change
+
+      @private
+      @method _paramsChanged
+     */
+    _paramsChanged: function() {
+      this.notifyPropertyChange('resolvedParams');
+    },
+
+    /**
+     This is called to setup observers that will trigger a rerender.
+
+     @private
+     @method _setupPathObservers
+    **/
+    _setupPathObservers: function(){
       var helperParameters = this.parameters,
-          templateContext = helperParameters.context,
+          linkTextPath     = helperParameters.options.linkTextPath,
           paths = getResolvedPaths(helperParameters),
           length = paths.length,
           path, i, normalizedPath;
 
-      var linkTextPath = helperParameters.options.linkTextPath;
       if (linkTextPath) {
-        normalizedPath = Ember.Handlebars.normalizePath(templateContext, linkTextPath, helperParameters.options.data);
+        normalizedPath = Ember.Handlebars.normalizePath(helperParameters.context, linkTextPath, helperParameters.options.data);
         this.registerObserver(normalizedPath.root, normalizedPath.path, this, this.rerender);
       }
 
@@ -199,49 +216,37 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
           continue;
         }
 
-        normalizedPath = Ember.Handlebars.normalizePath(templateContext, path, helperParameters.options.data);
+        normalizedPath = Ember.Handlebars.normalizePath(helperParameters.context, path, helperParameters.options.data);
         this.registerObserver(normalizedPath.root, normalizedPath.path, this, this._paramsChanged);
       }
 
+      var queryParamsObject = this.queryParamsObject;
+      if (queryParamsObject) {
+        var values = queryParamsObject.values;
 
-      if (Ember.FEATURES.isEnabled("query-params")) {
-        var queryParams = get(this, '_potentialQueryParams') || [];
+        // Install observers for all of the hash options
+        // provided in the (query-params) subexpression.
+        for (var k in values) {
+          if (!values.hasOwnProperty(k)) { continue; }
 
-        for(i=0; i < queryParams.length; i++) {
-          this.registerObserver(this, queryParams[i], this, this._queryParamsChanged);
+          if (queryParamsObject.types[k] === 'ID') {
+            normalizedPath = Ember.Handlebars.normalizePath(helperParameters.context, values[k], helperParameters.options.data);
+            this.registerObserver(normalizedPath.root, normalizedPath.path, this, this._paramsChanged);
+          }
         }
       }
     },
 
-    /**
-      @private
-
-      This method is invoked by observers installed during `init` that fire
-      whenever the params change
-      @method _paramsChanged
-     */
-    _paramsChanged: function() {
-      this.notifyPropertyChange('resolvedParams');
+    afterRender: function(){
+      this._super.apply(this, arguments);
+      this._setupPathObservers();
     },
 
-
     /**
-      @private
-
-      This method is invoked by observers installed during `init` that fire
-      whenever the query params change
-     */
-    _queryParamsChanged: function (object, path) {
-      this.notifyPropertyChange('queryParams');
-    },
-
-
-    /**
-      @private
-
       Even though this isn't a virtual view, we want to treat it as if it is
       so that you can access the parent with {{view.prop}}
 
+      @private
       @method concreteView
     **/
     concreteView: Ember.computed(function() {
@@ -256,7 +261,7 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
       When `true` interactions with the element will not trigger route changes.
       @property disabled
     */
-    disabled: Ember.computed(function(key, value) {
+    disabled: Ember.computed(function computeLinkViewDisabled(key, value) {
       if (value !== undefined) { this.set('_isDisabled', value); }
 
       return value ? get(this, 'disabledClass') : false;
@@ -272,20 +277,27 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
 
       @property active
     **/
-    active: Ember.computed(function() {
+    active: Ember.computed(function computeLinkViewActive() {
       if (get(this, 'loading')) { return false; }
 
       var router = get(this, 'router'),
           routeArgs = get(this, 'routeArgs'),
           contexts = routeArgs.slice(1),
           resolvedParams = get(this, 'resolvedParams'),
-          currentWhen = this.currentWhen || resolvedParams[0],
-          currentWithIndex = currentWhen + '.index',
-          isActive = router.isActive.apply(router, [currentWhen].concat(contexts)) ||
-                     router.isActive.apply(router, [currentWithIndex].concat(contexts));
+          currentWhen = this.currentWhen || routeArgs[0];
+
+      // if overriding active w/ currentWhen then don't apply contexts since they won't match
+      if (this.currentWhen) {
+        contexts = [];
+        if (Ember.FEATURES.isEnabled("query-params-new")) {
+          contexts.push({ queryParams: get(this, 'queryParams') });
+        }
+      }
+
+      var isActive = router.isActive.apply(router, [currentWhen].concat(contexts));
 
       if (isActive) { return get(this, 'activeClass'); }
-    }).property('resolvedParams', 'routeArgs', 'router.url'),
+    }).property('resolvedParams', 'routeArgs'),
 
     /**
       Accessed as a classname binding to apply the `LinkView`'s `loadingClass`
@@ -298,15 +310,14 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
 
       @property loading
     **/
-    loading: Ember.computed(function() {
+    loading: Ember.computed(function computeLinkViewLoading() {
       if (!get(this, 'routeArgs')) { return get(this, 'loadingClass'); }
     }).property('routeArgs'),
 
     /**
-      @private
-
       Returns the application's main router from the container.
 
+      @private
       @property router
     **/
     router: Ember.computed(function() {
@@ -314,17 +325,16 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
     }),
 
     /**
-      @private
-
       Event handler that invokes the link, activating the associated route.
 
+      @private
       @method _invoke
       @param {Event} event
     */
     _invoke: function(event) {
       if (!isSimpleClick(event)) { return true; }
 
-      event.preventDefault();
+      if (this.preventDefault !== false) { event.preventDefault(); }
       if (this.bubbles === false) { event.stopPropagation(); }
 
       if (get(this, '_isDisabled')) { return false; }
@@ -337,18 +347,67 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
       var router = get(this, 'router'),
           routeArgs = get(this, 'routeArgs');
 
+      var transition;
       if (get(this, 'replace')) {
-        router.replaceWith.apply(router, routeArgs);
+        transition = router.replaceWith.apply(router, routeArgs);
       } else {
-        router.transitionTo.apply(router, routeArgs);
+        transition = router.transitionTo.apply(router, routeArgs);
+      }
+
+      // Schedule eager URL update, but after we've given the transition
+      // a chance to synchronously redirect.
+      if (Ember.FEATURES.isEnabled("ember-eager-url-update")) {
+        // We need to always generate the URL instead of using the href because
+        // the href will include any rootURL set, but the router expects a URL
+        // without it! Note that we don't use the first level router because it
+        // calls location.formatURL(), which also would add the rootURL!
+        var url = router.router.generate.apply(router.router, get(this, 'routeArgs'));
+        Ember.run.scheduleOnce('routerTransitions', this, this._eagerUpdateUrl, transition, url);
       }
     },
 
     /**
       @private
+     */
+    _eagerUpdateUrl: function(transition, href) {
+      if (!transition.isActive || !transition.urlMethod) {
+        // transition was aborted, already ran to completion,
+        // or it has a null url-updated method.
+        return;
+      }
 
-      Computed property that returns the resolved parameters.
+      if (href.indexOf('#') === 0) {
+        href = href.slice(1);
+      }
 
+      // Re-use the routerjs hooks set up by the Ember router.
+      var routerjs = get(this, 'router.router');
+      if (transition.urlMethod === 'update') {
+        routerjs.updateURL(href);
+      } else if (transition.urlMethod === 'replace') {
+        routerjs.replaceURL(href);
+      }
+
+      // Prevent later update url refire.
+      transition.method(null);
+    },
+
+    /**
+      Computed property that returns an array of the
+      resolved parameters passed to the `link-to` helper,
+      e.g.:
+
+      ```hbs
+      {{link-to a b '123' c}}
+      ```
+
+      will generate a `resolvedParams` of:
+
+      ```js
+      [aObject, bObject, '123', cObject]
+      ```
+
+      @private
       @property
       @return {Array}
      */
@@ -358,39 +417,45 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
           types = options.types,
           data = options.data;
 
-      if (Ember.FEATURES.isEnabled("query-params")) {
-        if (parameters.params.length === 0) {
-          var appController = this.container.lookup('controller:application');
-          return [get(appController, 'currentRouteName')];
-        } else {
-          return resolveParams(parameters.context, parameters.params, { types: types, data: data });
-        }
+      if (parameters.params.length === 0) {
+        var appController = this.container.lookup('controller:application');
+        return [get(appController, 'currentRouteName')];
+      } else {
+        return resolveParams(parameters.context, parameters.params, { types: types, data: data });
       }
 
       // Original implementation if query params not enabled
       return resolveParams(parameters.context, parameters.params, { types: types, data: data });
-    }).property(),
+    }).property('router.url'),
 
     /**
-      @private
-
       Computed property that returns the current route name and
       any dynamic segments.
 
+      @private
       @property
       @return {Array} An array with the route name and any dynamic segments
      */
-    routeArgs: Ember.computed(function() {
+    routeArgs: Ember.computed(function computeLinkViewRouteArgs() {
       var resolvedParams = get(this, 'resolvedParams').slice(0),
           router = get(this, 'router'),
           namedRoute = resolvedParams[0];
 
       if (!namedRoute) { return; }
 
-      namedRoute = fullRouteName(router, namedRoute);
-      resolvedParams[0] = namedRoute;
+      Ember.assert(fmt("The attempt to link-to route '%@' failed. " +
+                       "The router did not find '%@' in its possible routes: '%@'",
+                       [namedRoute, namedRoute, Ember.keys(router.router.recognizer.names).join("', '")]),
+                       router.hasRoute(namedRoute));
 
-      Ember.assert(fmt("The attempt to link-to route '%@' failed. The router did not find '%@' in its possible routes: '%@'", [namedRoute, namedRoute, Ember.keys(router.router.recognizer.names).join("', '")]), router.hasRoute(namedRoute));
+      //normalize route name
+      var handlers = router.router.recognizer.handlersFor(namedRoute);
+      var normalizedPath = handlers[handlers.length - 1].handler;
+      if (namedRoute !== normalizedPath) {
+        this.set('currentWhen', namedRoute);
+        namedRoute = handlers[handlers.length - 1].handler;
+        resolvedParams[0] = namedRoute;
+      }
 
       for (var i = 1, len = resolvedParams.length; i < len; ++i) {
         var param = resolvedParams[i];
@@ -400,43 +465,58 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
         }
       }
 
-      if (Ember.FEATURES.isEnabled("query-params")) {
-        var queryParams = get(this, 'queryParams');
-
-        if (queryParams || queryParams === false) { resolvedParams.push({queryParams: queryParams}); }
+      if (Ember.FEATURES.isEnabled("query-params-new")) {
+        resolvedParams.push({ queryParams: get(this, 'queryParams') });
       }
 
       return resolvedParams;
-    }).property('resolvedParams', 'queryParams', 'router.url'),
+    }).property('resolvedParams', 'queryParams'),
 
+    queryParamsObject: null,
+    queryParams: Ember.computed(function computeLinkViewQueryParams() {
 
-    _potentialQueryParams: Ember.computed(function () {
-      var namedRoute = get(this, 'resolvedParams')[0];
-      if (!namedRoute) { return null; }
-      var router          = get(this, 'router');
+      var queryParamsObject = get(this, 'queryParamsObject'),
+          suppliedParams = {};
 
-      namedRoute = fullRouteName(router, namedRoute);
+      if (queryParamsObject) {
+        Ember.merge(suppliedParams, queryParamsObject.values);
+      }
 
-      return router.router.queryParamsForHandler(namedRoute);
-    }).property('resolvedParams'),
+      var resolvedParams = get(this, 'resolvedParams'),
+          router = get(this, 'router'),
+          routeName = resolvedParams[0],
+          paramsForRoute = router._queryParamNamesFor(routeName),
+          queryParams = paramsForRoute.queryParams,
+          translations = paramsForRoute.translations,
+          paramsForRecognizer = {};
 
-    queryParams: Ember.computed(function () {
-      var self              = this,
-        queryParams         = null,
-        allowedQueryParams  = get(this, '_potentialQueryParams');
+      // Normalize supplied params into their long-form name
+      // e.g. 'foo' -> 'controllername:foo'
+      translateQueryParams(suppliedParams, translations, routeName);
 
-      if (!allowedQueryParams) { return null; }
-      allowedQueryParams.forEach(function (param) {
-        var value = get(self, param);
-        if (typeof value !== 'undefined') {
-          queryParams = queryParams || {};
-          queryParams[param] = value;
+      var helperParameters = this.parameters;
+      router._queryParamOverrides(paramsForRecognizer, queryParams, function(name, resultsName) {
+        if (!(name in suppliedParams)) { return; }
+
+        var parts = name.split(':');
+
+        var type = queryParamsObject.types[parts[1]];
+
+        var value;
+        if (type === 'ID') {
+          var normalizedPath = Ember.Handlebars.normalizePath(helperParameters.context, suppliedParams[name], helperParameters.options.data);
+          value = Ember.Handlebars.get(normalizedPath.root, normalizedPath.path, helperParameters.options);
+        } else {
+          value = suppliedParams[name];
         }
+
+        delete suppliedParams[name];
+
+        paramsForRecognizer[resultsName] = value;
       });
 
-
-      return queryParams;
-    }).property('_potentialQueryParams.[]'),
+      return paramsForRecognizer;
+    }).property('resolvedParams.[]'),
 
     /**
       Sets the element's `href` attribute to the url for
@@ -447,7 +527,7 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
 
       @property href
     **/
-    href: Ember.computed(function() {
+    href: Ember.computed(function computeLinkViewHref() {
       if (get(this, 'tagName') !== 'a') { return; }
 
       var router = get(this, 'router'),
@@ -507,44 +587,44 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
 
     To override this option for your entire application, see
     "Overriding Application-wide Defaults".
-    
+
     ### Disabling the `link-to` helper
-    By default `{{link-to}}` is enabled. 
+    By default `{{link-to}}` is enabled.
     any passed value to `disabled` helper property will disable the `link-to` helper.
-     
+
     static use: the `disabled` option:
- 
+
     ```handlebars
     {{#link-to 'photoGallery' disabled=true}}
       Great Hamster Photos
     {{/link-to}}
     ```
-     
+
     dynamic use: the `disabledWhen` option:
-    
+
     ```handlebars
     {{#link-to 'photoGallery' disabledWhen=controller.someProperty}}
       Great Hamster Photos
     {{/link-to}}
     ```
-    
+
     any passed value to `disabled` will disable it except `undefined`.
     to ensure that only `true` disable the `link-to` helper you can
     override the global behaviour of `Ember.LinkView`.
-         
-    ```javascript  
+
+    ```javascript
     Ember.LinkView.reopen({
       disabled: Ember.computed(function(key, value) {
-        if (value !== undefined) { 
-          this.set('_isDisabled', value === true); 
+        if (value !== undefined) {
+          this.set('_isDisabled', value === true);
         }
         return value === true ? get(this, 'disabledClass') : false;
       })
     });
     ```
-     
+
     see "Overriding Application-wide Defaults" for more.
-    
+
     ### Handling `href`
     `{{link-to}}` will use your application's Router to
     fill the element's `href` property with a url that
@@ -670,13 +750,29 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
     When transitioning into the linked route, the `model` hook will
     be triggered with parameters including this passed identifier.
 
+    ### Allowing Default Action
+
+   By default the `{{link-to}}` helper prevents the default browser action
+   by calling `preventDefault()` as this sort of action bubbling is normally
+   handled internally and we do not want to take the browser to a new URL (for
+   example).
+
+   If you need to override this behavior specify `preventDefault=false` in
+   your template:
+
+    ```handlebars
+    {{#link-to 'photoGallery' aPhotoId preventDefault=false}}
+      {{aPhotoId.title}}
+    {{/link-to}}
+    ```
+
     ### Overriding attributes
     You can override any given property of the Ember.LinkView
     that is generated by the `{{link-to}}` helper by passing
     key/value pairs, like so:
 
     ```handlebars
-    {{#link-to  aPhoto tagName='li' title='Following this link will change your life' classNames=['pic', 'sweet']}}
+    {{#link-to  aPhoto tagName='li' title='Following this link will change your life' classNames='pic sweet'}}
       Uh-mazing!
     {{/link-to}}
     ```
@@ -715,10 +811,14 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
     @return {String} HTML string
     @see {Ember.LinkView}
   */
-  Ember.Handlebars.registerHelper('link-to', function(name) {
-    var options = [].slice.call(arguments, -1)[0],
-        params = [].slice.call(arguments, 0, -1),
+  Ember.Handlebars.registerHelper('link-to', function linkToHelper(name) {
+    var options = slice.call(arguments, -1)[0],
+        params = slice.call(arguments, 0, -1),
         hash = options.hash;
+
+    if (params[params.length - 1] instanceof QueryParams) {
+      hash.queryParamsObject = params.pop();
+    }
 
     hash.disabledBinding = hash.disabledWhen;
 
@@ -729,7 +829,7 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
       if (linkType === 'ID') {
         options.linkTextPath = linkTitle;
         options.fn = function() {
-          return Ember.Handlebars.get(context, linkTitle, options);
+          return Ember.Handlebars.getEscaped(context, linkTitle, options);
         };
       } else {
         options.fn = function() {
@@ -747,6 +847,18 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
     return Ember.Handlebars.helpers.view.call(this, LinkView, options);
   });
 
+
+  if (Ember.FEATURES.isEnabled("query-params-new")) {
+    Ember.Handlebars.registerHelper('query-params', function queryParamsHelper(options) {
+      Ember.assert(fmt("The `query-params` helper only accepts hash parameters, e.g. (query-params queryParamPropertyName='%@') as opposed to just (query-params '%@')", [options, options]), arguments.length === 1);
+
+      return QueryParams.create({
+        values: options.hash,
+        types: options.hashTypes
+      });
+    });
+  }
+
   /**
     See [link-to](/api/classes/Ember.Handlebars.helpers.html#method_link-to)
 
@@ -757,7 +869,10 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
     @param {Object} [context]*
     @return {String} HTML string
   */
-  Ember.Handlebars.registerHelper('linkTo', Ember.Handlebars.helpers['link-to']);
+  Ember.Handlebars.registerHelper('linkTo', function linkToHelper() {
+    Ember.warn("The 'linkTo' view helper is deprecated in favor of 'link-to'");
+    return Ember.Handlebars.helpers['link-to'].apply(this, arguments);
+  });
 });
 
 

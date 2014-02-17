@@ -62,7 +62,7 @@ function escapeAttribute(value) {
   return string.replace(BAD_CHARS_REGEXP, escapeChar);
 }
 
-// IE 6/7 have bugs arond setting names on inputs during creation.
+// IE 6/7 have bugs around setting names on inputs during creation.
 // From http://msdn.microsoft.com/en-us/library/ie/ms536389(v=vs.85).aspx:
 // "To include the NAME attribute at run time on objects created with the createElement method, use the eTag."
 var canSetNameOnInputs = (function() {
@@ -98,8 +98,7 @@ Ember._RenderBuffer = function(tagName) {
   this.buffer = "";
 };
 
-Ember._RenderBuffer.prototype =
-/** @scope Ember.RenderBuffer.prototype */ {
+Ember._RenderBuffer.prototype = {
 
   // The root view's element
   _element: null,
@@ -107,12 +106,11 @@ Ember._RenderBuffer.prototype =
   _hasElement: true,
 
   /**
-    @private
-
     An internal set used to de-dupe class names when `addClass()` is
     used. After each call to `addClass()`, the `classes` property
     will be updated.
 
+    @private
     @property elementClasses
     @type Array
     @default []
@@ -242,7 +240,11 @@ Ember._RenderBuffer.prototype =
   },
 
   setClasses: function(classNames) {
-    this.classes = classNames;
+    this.elementClasses = null;
+    var len = classNames.length, i;
+    for (i = 0; i < len; i++) {
+      this.addClass(classNames[i]);
+    }
   },
 
   /**
@@ -296,7 +298,7 @@ Ember._RenderBuffer.prototype =
   },
 
   /**
-    Adds an property which will be rendered to the element.
+    Adds a property which will be rendered to the element.
 
     @method prop
     @param {String} name The name of the property
@@ -376,6 +378,7 @@ Ember._RenderBuffer.prototype =
     if (classes) {
       buffer += ' class="' + escapeAttribute(classes.join(' ')) + '"';
       this.classes = null;
+      this.elementClasses = null;
     }
 
     if (style) {
@@ -458,6 +461,7 @@ Ember._RenderBuffer.prototype =
     if (classes) {
       $element.attr('class', classes.join(' '));
       this.classes = null;
+      this.elementClasses = null;
     }
 
     if (style) {

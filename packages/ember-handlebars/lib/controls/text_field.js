@@ -14,7 +14,7 @@ var get = Ember.get, set = Ember.set;
   The internal class used to create text inputs when the `{{input}}`
   helper is used with `type` of `text`.
 
-  See [handlebars.helpers.input](/api/classes/Ember.Handlebars.helpers.html#method_input)  for usage details.
+  See [Handlebars.helpers.input](/api/classes/Ember.Handlebars.helpers.html#method_input)  for usage details.
 
   ## Layout and LayoutName properties
 
@@ -27,12 +27,15 @@ var get = Ember.get, set = Ember.set;
   @extends Ember.Component
   @uses Ember.TextSupport
 */
-Ember.TextField = Ember.Component.extend(Ember.TextSupport,
-  /** @scope Ember.TextField.prototype */ {
+Ember.TextField = Ember.Component.extend(Ember.TextSupport, {
 
   classNames: ['ember-text-field'],
   tagName: "input",
-  attributeBindings: ['type', 'value', 'size', 'pattern', 'name'],
+  attributeBindings: ['type', 'value', 'size', 'pattern', 'name', 'min', 'max',
+                      'accept', 'autocomplete', 'autosave', 'formaction',
+                      'formenctype', 'formmethod', 'formnovalidate', 'formtarget',
+                      'height', 'inputmode', 'list', 'multiple', 'pattern', 'step',
+                      'width'],
 
   /**
     The `value` attribute of the input element. As the user inputs text, this
@@ -63,11 +66,29 @@ Ember.TextField = Ember.Component.extend(Ember.TextSupport,
   size: null,
 
   /**
-    The `pattern` the pattern attribute of input element.
+    The `pattern` attribute of input element.
 
     @property pattern
     @type String
     @default null
   */
-  pattern: null
+  pattern: null,
+
+  /**
+    The `min` attribute of input element used with `type="number"` or `type="range"`.
+
+    @property min 
+    @type String
+    @default null
+  */
+  min: null,
+
+  /**
+    The `max` attribute of input element used with `type="number"` or `type="range"`.
+
+    @property max 
+    @type String
+    @default null
+  */
+  max: null
 });

@@ -3,10 +3,9 @@
 This is the issue tracker for Ember.js. The Ember.js community uses this site
 to collect and track bugs and discussions of new features. If you are having
 difficulties using Ember.js or have a question about usage please ask a
-question on StackOverflow: http://stackoverflow.com/questions/ask and tag
-your question with `ember.js`.
+question on Stack Overflow: http://stackoverflow.com/questions/ask?tags=ember.js
 
-The Ember.js community is very active on StackOverflow and most questions
+The Ember.js community is very active on Stack Overflow and most questions
 receive attention the same day they're posted:
 http://stackoverflow.com/questions/tagged/ember.js
 
@@ -70,34 +69,6 @@ bundle install
 npm install
 rake
 ```
-
-For those having issues with some of the build tool dependencies, an optional VagrantFile is provided.
-
-Using Vagrant to build latest version of Ember.js is quite simple. Just
-follow these 4 steps:
-
-1. Install Virtual Box - [Download](https://www.virtualbox.org/wiki/Downloads)
-
-2. Install Vagrant - [Download](http://downloads.vagrantup.com/)
-
-3. Retrieve chef cookbooks
-~~~
-git submodule init
-git submodule update
-~~~
-4. Lauch your vagrant virtual machine
-~~~
-vagrant up
-vagrant ssh
-~~~
-5. Use it!
-~~~
-cd /vagrant
-bundle install
-rake dist
-rake test
-...
-~~~
 
 # Pull Requests
 

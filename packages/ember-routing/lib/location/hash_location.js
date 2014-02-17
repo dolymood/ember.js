@@ -3,11 +3,12 @@
 @submodule ember-routing
 */
 
-var get = Ember.get, set = Ember.set;
+var get = Ember.get, set = Ember.set,
+    getHash = Ember.Location.getHash;
 
 /**
-  Ember.HashLocation implements the location API using the browser's
-  hash. At present, it relies on a hashchange event existing in the
+  `Ember.HashLocation` implements the location API using the browser's
+  hash. At present, it relies on a `hashchange` event existing in the
   browser.
 
   @class HashLocation
@@ -22,36 +23,21 @@ Ember.HashLocation = Ember.Object.extend({
   },
 
   /**
-    @private
-
     Returns the current `location.hash`, minus the '#' at the front.
 
+    @private
     @method getURL
   */
   getURL: function() {
-    if (Ember.FEATURES.isEnabled("query-params")) {
-      // location.hash is not used because it is inconsistently
-      // URL-decoded between browsers.
-      var href = get(this, 'location').href,
-        hashIndex = href.indexOf('#');
-
-      if ( hashIndex === -1 ) {
-        return "";
-      } else {
-        return href.substr(hashIndex + 1);
-      }
-    }
-    // Default implementation without feature flag enabled
-    return get(this, 'location').hash.substr(1);
+    return getHash().substr(1);
   },
 
   /**
-    @private
-
     Set the `location.hash` and remembers what was set. This prevents
     `onUpdateURL` callbacks from triggering when the hash was set by
     `HashLocation`.
 
+    @private
     @method setURL
     @param path {String}
   */
@@ -61,25 +47,24 @@ Ember.HashLocation = Ember.Object.extend({
   },
 
   /**
-    @private
-
     Uses location.replace to update the url without a page reload
     or history modification.
 
+    @private
     @method replaceURL
     @param path {String}
   */
   replaceURL: function(path) {
     get(this, 'location').replace('#' + path);
+    set(this, 'lastSetURL', path);
   },
 
   /**
-    @private
-
     Register a callback to be invoked when the hash changes. These
     callbacks will execute when the user presses the back or forward
     button, but not after `setURL` is invoked.
 
+    @private
     @method onUpdateURL
     @param callback {Function}
   */
@@ -89,7 +74,7 @@ Ember.HashLocation = Ember.Object.extend({
 
     Ember.$(window).on('hashchange.ember-location-'+guid, function() {
       Ember.run(function() {
-        var path = location.hash.substr(1);
+        var path = self.getURL();
         if (get(self, 'lastSetURL') === path) { return; }
 
         set(self, 'lastSetURL', null);
@@ -100,14 +85,13 @@ Ember.HashLocation = Ember.Object.extend({
   },
 
   /**
-    @private
-
     Given a URL, formats it to be placed into the page as part
     of an element's `href` attribute.
 
     This is used, for example, when using the {{action}} helper
     to generate a URL based on an event.
 
+    @private
     @method formatURL
     @param url {String}
   */
@@ -116,10 +100,9 @@ Ember.HashLocation = Ember.Object.extend({
   },
 
   /**
-    @private
-
     Cleans up the HashLocation event listener.
 
+    @private
     @method willDestroy
   */
   willDestroy: function() {

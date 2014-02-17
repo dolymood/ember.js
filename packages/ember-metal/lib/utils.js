@@ -8,10 +8,8 @@ require('ember-metal/error');
 */
 
 /**
-  @private
-  
   Prefix used for guids through out Ember.
-  
+  @private
 */
 Ember.GUID_PREFIX = 'ember';
 
@@ -20,15 +18,13 @@ var o_defineProperty = Ember.platform.defineProperty,
     o_create = Ember.create,
     // Used for guid generation...
     GUID_KEY = '__ember'+ (+ new Date()),
-    uuid         = 0,
     numberCache  = [],
-    stringCache  = {};
+    stringCache  = {},
+    uuid = 0;
 
 var MANDATORY_SETTER = Ember.ENV.MANDATORY_SETTER;
 
 /**
-  @private
-
   A unique key used to assign guids and other private metadata to objects.
   If you inspect an object in your browser debugger you will often see these.
   They can be safely ignored.
@@ -36,6 +32,7 @@ var MANDATORY_SETTER = Ember.ENV.MANDATORY_SETTER;
   On browsers that support it, these properties are added with enumeration
   disabled so they won't show up when you iterate over your properties.
 
+  @private
   @property GUID_KEY
   @for Ember
   @type String
@@ -51,12 +48,11 @@ var GUID_DESC = {
 };
 
 /**
-  @private
-
   Generates a new guid, optionally saving the guid to the object that you
   pass in. You will rarely need to use this method. Instead you should
   call `Ember.guidFor(obj)`, which return an existing guid if available.
 
+  @private
   @method generateGuid
   @for Ember
   @param {Object} [obj] Object the guid will be used for. If passed in, the guid will
@@ -72,15 +68,17 @@ Ember.generateGuid = function generateGuid(obj, prefix) {
   if (!prefix) prefix = Ember.GUID_PREFIX;
   var ret = (prefix + (uuid++));
   if (obj) {
-    GUID_DESC.value = ret;
-    o_defineProperty(obj, GUID_KEY, GUID_DESC);
+    if (obj[GUID_KEY] === null) {
+      obj[GUID_KEY] = ret;
+    } else {
+      GUID_DESC.value = ret;
+      o_defineProperty(obj, GUID_KEY, GUID_DESC);
+    }
   }
   return ret;
 };
 
 /**
-  @private
-
   Returns a unique id for the object. If the object does not yet have a guid,
   one will be assigned to it. You can call this on any object,
   `Ember.Object`-based or not, but be aware that it will add a `_guid`
@@ -88,6 +86,7 @@ Ember.generateGuid = function generateGuid(obj, prefix) {
 
   You can also use this method on DOM Element objects.
 
+  @private
   @method guidFor
   @for Ember
   @param {Object} obj any object, string, number, Element, or primitive
@@ -121,9 +120,14 @@ Ember.guidFor = function guidFor(obj) {
       if (obj[GUID_KEY]) return obj[GUID_KEY];
       if (obj === Object) return '(Object)';
       if (obj === Array)  return '(Array)';
-      ret = 'ember'+(uuid++);
-      GUID_DESC.value = ret;
-      o_defineProperty(obj, GUID_KEY, GUID_DESC);
+      ret = 'ember' + (uuid++);
+
+      if (obj[GUID_KEY] === null) {
+        obj[GUID_KEY] = ret;
+      } else {
+        GUID_DESC.value = ret;
+        o_defineProperty(obj, GUID_KEY, GUID_DESC);
+      }
       return ret;
   }
 };
@@ -132,7 +136,7 @@ Ember.guidFor = function guidFor(obj) {
 // META
 //
 
-var META_DESC = {
+var META_DESC = Ember.META_DESC = {
   writable:    true,
   configurable: false,
   enumerable:  false,
@@ -152,18 +156,6 @@ var META_KEY = Ember.GUID_KEY+'_meta';
 */
 Ember.META_KEY = META_KEY;
 
-// Placeholder for non-writable metas.
-var EMPTY_META = {
-  descs: {},
-  watching: {}
-};
-
-if (MANDATORY_SETTER) { EMPTY_META.values = {}; }
-
-Ember.EMPTY_META = EMPTY_META;
-
-if (Object.freeze) Object.freeze(EMPTY_META);
-
 var isDefinePropertySimulated = Ember.platform.defineProperty.isSimulated;
 
 function Meta(obj) {
@@ -172,6 +164,21 @@ function Meta(obj) {
   this.cache = {};
   this.source = obj;
 }
+
+Meta.prototype = {
+  descs: null,
+  deps: null,
+  watching: null,
+  listeners: null,
+  cache: null,
+  source: null,
+  mixins: null,
+  bindings: null,
+  chains: null,
+  chainWatchers: null,
+  values: null,
+  proto: null
+};
 
 if (isDefinePropertySimulated) {
   // on platforms that don't support enumerable false
@@ -184,6 +191,13 @@ if (isDefinePropertySimulated) {
   // unless explicitly suppressed
   Meta.prototype.toJSON = function () { };
 }
+
+// Placeholder for non-writable metas.
+var EMPTY_META = new Meta(null);
+
+if (MANDATORY_SETTER) { EMPTY_META.values = {}; }
+
+Ember.EMPTY_META = EMPTY_META;
 
 /**
   Retrieves the meta hash for an object. If `writable` is true ensures the
@@ -304,12 +318,11 @@ Ember.metaPath = function metaPath(obj, path, writable) {
 };
 
 /**
-  @private
-
   Wraps the passed function so that `this._super` will point to the superFunc
   when the function is invoked. This is the primitive we use to implement
   calls to super.
 
+  @private
   @method wrap
   @for Ember
   @param {Function} func The function to call
@@ -317,13 +330,11 @@ Ember.metaPath = function metaPath(obj, path, writable) {
   @return {Function} wrapped function.
 */
 Ember.wrap = function(func, superFunc) {
-  function K() {}
-
   function superWrapper() {
-    var ret, sup = this._super;
-    this._super = superFunc || K;
+    var ret, sup = this.__nextSuper;
+    this.__nextSuper = superFunc;
     ret = func.apply(this, arguments);
-    this._super = sup;
+    this.__nextSuper = sup;
     return ret;
   }
 
@@ -619,6 +630,8 @@ var toString = Object.prototype.toString;
       | 'undefined'   | Undefined value                                      |
       | 'function'    | A function                                           |
       | 'array'       | An instance of Array                                 |
+      | 'regexp'      | An instance of RegExp                                |
+      | 'date'        | An instance of Date                                  |
       | 'class'       | An Ember class (created using Ember.Object.extend()) |
       | 'instance'    | An Ember object instance                             |
       | 'error'       | An instance of the Error object                      |
@@ -638,6 +651,8 @@ var toString = Object.prototype.toString;
   Ember.typeOf(new Boolean(true));      // 'boolean'
   Ember.typeOf(Ember.makeArray);        // 'function'
   Ember.typeOf([1,2,90]);               // 'array'
+  Ember.typeOf(/abc/);                  // 'regexp'
+  Ember.typeOf(new Date());             // 'date'
   Ember.typeOf(Ember.Object.extend());  // 'class'
   Ember.typeOf(Ember.Object.create());  // 'instance'
   Ember.typeOf(new Error('teamocil'));  // 'error'
@@ -661,8 +676,43 @@ Ember.typeOf = function(item) {
   } else if (ret === 'object') {
     if (item instanceof Error) ret = 'error';
     else if (Ember.Object && item instanceof Ember.Object) ret = 'instance';
-    else ret = 'object';
+    else if (item instanceof Date) ret = 'date';
   }
 
   return ret;
 };
+
+/**
+  Convenience method to inspect an object. This method will attempt to
+  convert the object into a useful string description.
+
+  It is a pretty simple implementation. If you want something more robust,
+  use something like JSDump: https://github.com/NV/jsDump
+
+  @method inspect
+  @for Ember
+  @param {Object} obj The object you want to inspect.
+  @return {String} A description of the object
+*/
+Ember.inspect = function(obj) {
+  var type = Ember.typeOf(obj);
+  if (type === 'array') {
+    return '[' + obj + ']';
+  }
+  if (type !== 'object') {
+    return obj + '';
+  }
+
+  var v, ret = [];
+  for(var key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      v = obj[key];
+      if (v === 'toString') { continue; } // ignore useless items
+      if (Ember.typeOf(v) === 'function') { v = "function() { ... }"; }
+      ret.push(key + ": " + v);
+    }
+  }
+  return "{" + ret.join(", ") + "}";
+};
+
+
